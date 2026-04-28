@@ -83,7 +83,7 @@ app.post('/api/analyze', async (req, res) => {
     }
 
     // Call Gemini API
-    const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
+    const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`, {
       systemInstruction: {
         parts: [{ text: SYSTEM_PROMPT }]
       },
@@ -173,7 +173,7 @@ app.post('/api/analyze-file', upload.single('file'), async (req, res) => {
     }
 
     // Call Gemini API
-    const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
+    const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`, {
       systemInstruction: {
         parts: [{ text: SYSTEM_PROMPT }]
       },
