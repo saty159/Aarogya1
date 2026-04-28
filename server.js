@@ -20,6 +20,29 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(express.static('.'));
 
+// Track active requests by IP to prevent concurrent requests from the same device
+const activeRequests = new Set();
+
+// Middleware to prevent concurrent requests from the same IP
+const checkConcurrentRequest = (req, res, next) => {
+  // Use x-forwarded-for if behind a proxy like Vercel
+  const clientIp = req.headers['x-forwarded-for'] || req.ip || req.socket.remoteAddress || 'unknown';
+  
+  if (activeRequests.has(clientIp)) {
+    return res.status(429).json({ 
+      error: 'Please wait for your previous request to finish before submitting another one.' 
+    });
+  }
+  
+  activeRequests.add(clientIp);
+  
+  // Clean up when request finishes or closes unexpectedly
+  res.on('finish', () => activeRequests.delete(clientIp));
+  res.on('close', () => activeRequests.delete(clientIp));
+  
+  next();
+};
+
 // Configure multer for file uploads
 const storage = multer.memoryStorage();
 
@@ -65,7 +88,7 @@ Rules:
  * POST /api/analyze
  * Analyzes medical report text
  */
-app.post('/api/analyze', async (req, res) => {
+app.post('/api/analyze', checkConcurrentRequest, async (req, res) => {
   try {
     const { text } = req.body;
 
@@ -83,7 +106,7 @@ app.post('/api/analyze', async (req, res) => {
     }
 
     // Call Gemini API
-    const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`, {
+    const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
       systemInstruction: {
         parts: [{ text: SYSTEM_PROMPT }]
       },
@@ -141,7 +164,7 @@ app.post('/api/analyze', async (req, res) => {
  * POST /api/analyze-file
  * Analyzes uploaded medical report files
  */
-app.post('/api/analyze-file', upload.single('file'), async (req, res) => {
+app.post('/api/analyze-file', checkConcurrentRequest, upload.single('file'), async (req, res) => {
   try {
     const file = req.file;
 
@@ -173,7 +196,7 @@ app.post('/api/analyze-file', upload.single('file'), async (req, res) => {
     }
 
     // Call Gemini API
-    const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`, {
+    const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
       systemInstruction: {
         parts: [{ text: SYSTEM_PROMPT }]
       },
