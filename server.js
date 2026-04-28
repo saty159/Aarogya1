@@ -21,18 +21,7 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(express.static('.'));
 
 // Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, 'uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir);
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + file.originalname);
-  }
-});
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
@@ -161,25 +150,26 @@ app.post('/api/analyze-file', upload.single('file'), async (req, res) => {
     }
 
     let text = '';
+    let imageParts = [];
 
     // Extract text based on file type
     if (file.mimetype === 'text/plain') {
-      text = fs.readFileSync(file.path, 'utf-8');
+      text = file.buffer.toString('utf-8');
     } else if (file.mimetype === 'application/pdf') {
-      const pdfBuffer = fs.readFileSync(file.path);
-      const pdfData = await pdfParse(pdfBuffer);
+      const pdfData = await pdfParse(file.buffer);
       text = pdfData.text;
     } else if (file.mimetype.startsWith('image/')) {
-      return res.status(400).json({
-        error: 'Image files require OCR. Please copy and paste the text instead.'
+      const base64Image = file.buffer.toString('base64');
+      imageParts.push({
+        inlineData: {
+          mimeType: file.mimetype,
+          data: base64Image
+        }
       });
     }
 
-    // Clean up uploaded file
-    fs.unlinkSync(file.path);
-
-    if (!text.trim()) {
-      return res.status(400).json({ error: 'No text found in file' });
+    if (!text.trim() && imageParts.length === 0) {
+      return res.status(400).json({ error: 'No valid content found in file' });
     }
 
     // Call Gemini API
@@ -188,7 +178,10 @@ app.post('/api/analyze-file', upload.single('file'), async (req, res) => {
         parts: [{ text: SYSTEM_PROMPT }]
       },
       contents: [{
-        parts: [{ text: `Analyze this medical report and explain it:\n\n${text}` }]
+        parts: [
+          { text: `Analyze this medical report and explain it:\n\n${text}` },
+          ...imageParts
+        ]
       }],
       generationConfig: {
         responseMimeType: "application/json"
@@ -272,3 +265,5 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 console.log("API KEY:", API_KEY);
+
+module.exports = app;
