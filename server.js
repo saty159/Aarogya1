@@ -3,6 +3,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const axios = require('axios');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
 const pdfParse = require('pdf-parse');
@@ -19,6 +20,48 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(express.static('.'));
+
+// Simple In-Memory Cache
+const analysisCache = new Map();
+
+// Sequential Queue implementation
+class AsyncQueue {
+  constructor() {
+    this.queue = Promise.resolve();
+  }
+  add(operation) {
+    return new Promise((resolve, reject) => {
+      this.queue = this.queue.then(() => operation().then(resolve).catch(reject));
+    });
+  }
+}
+const requestQueue = new AsyncQueue();
+
+// API Rate Limiting: 15 requests per minute per IP
+const apiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, 
+  max: 15, 
+  message: { error: 'Too many requests from this IP, please try again after a minute.' }
+});
+
+// Exponential backoff retry wrapper for axios
+async function callGeminiWithRetry(url, data, headers, retries = 3, delay = 2000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await axios.post(url, data, { headers });
+    } catch (error) {
+      if (error.response && error.response.status === 429 && attempt < retries) {
+        console.warn(`Google API 429 rate limit hit. Retrying in ${delay}ms (Attempt ${attempt}/${retries})...`);
+        await new Promise(res => setTimeout(res, delay));
+        delay *= 2; // exponential backoff
+      } else {
+        throw error;
+      }
+    }
+  }
+}
+
+app.use('/api/', apiLimiter);
 
 // Middleware IP tracking removed for Vercel Serverless compatibility
 
@@ -84,27 +127,35 @@ app.post('/api/analyze', async (req, res) => {
       });
     }
 
-    // Call Gemini API
-    const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
-      systemInstruction: {
-        parts: [{ text: SYSTEM_PROMPT }]
-      },
-      contents: [{
-        parts: [{ text: `Analyze this medical report and explain it:\n\n${text}` }]
-      }],
-      generationConfig: {
-        responseMimeType: "application/json"
-      }
-    }, {
-      headers: {
+    // Caching check
+    if (analysisCache.has(text)) {
+      console.log('Returning cached analysis result.');
+      return res.json({ success: true, data: analysisCache.get(text) });
+    }
+
+    // Call Gemini API via sequential queue and retry wrapper
+    const response = await requestQueue.add(() => 
+      callGeminiWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`, {
+        systemInstruction: {
+          parts: [{ text: SYSTEM_PROMPT }]
+        },
+        contents: [{
+          parts: [{ text: `Analyze this medical report and explain it:\n\n${text}` }]
+        }],
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
+      }, {
         'Content-Type': 'application/json'
-      }
-    });
+      })
+    );
 
     // Extract and parse the response
     const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const cleanedContent = content.replace(/```json|```/g, '').trim();
     const result = JSON.parse(cleanedContent);
+
+    analysisCache.set(text, result);
 
     res.json({
       success: true,
@@ -174,30 +225,43 @@ app.post('/api/analyze-file', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No valid content found in file' });
     }
 
-    // Call Gemini API
-    const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
-      systemInstruction: {
-        parts: [{ text: SYSTEM_PROMPT }]
-      },
-      contents: [{
-        parts: [
-          { text: `Analyze this medical report and explain it:\n\n${text}` },
-          ...imageParts
-        ]
-      }],
-      generationConfig: {
-        responseMimeType: "application/json"
-      }
-    }, {
-      headers: {
-        'Content-Type': 'application/json'
-      }
+    // Generate cache key
+    const cacheKey = JSON.stringify({ 
+      text: text.trim(), 
+      imgSig: imageParts.map(p => p.inlineData.data.substring(0, 100)) 
     });
+
+    if (analysisCache.has(cacheKey)) {
+      console.log('Returning cached file analysis result.');
+      return res.json({ success: true, data: analysisCache.get(cacheKey) });
+    }
+
+    // Call Gemini API via sequential queue and retry wrapper
+    const response = await requestQueue.add(() => 
+      callGeminiWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`, {
+        systemInstruction: {
+          parts: [{ text: SYSTEM_PROMPT }]
+        },
+        contents: [{
+          parts: [
+            { text: `Analyze this medical report and explain it:\n\n${text}` },
+            ...imageParts
+          ]
+        }],
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
+      }, {
+        'Content-Type': 'application/json'
+      })
+    );
 
     // Extract and parse the response
     const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const cleanedContent = content.replace(/```json|```/g, '').trim();
     const result = JSON.parse(cleanedContent);
+
+    analysisCache.set(cacheKey, result);
 
     res.json({
       success: true,
