@@ -18,28 +18,16 @@ const PORT = process.env.PORT || 5000;
 const API_KEY = process.env.GEMINI_API_KEY || process.env.ANTHROPIC_API_KEY;
 const JWT_SECRET = process.env.JWT_SECRET || 'aarogya_secret_key_2026';
 
-// File-based Database configuration
-const DB_FILE = path.join(__dirname, 'users.json');
+const { Pool } = require('pg');
 
-function getUsers() {
-  try {
-    if (!fs.existsSync(DB_FILE)) {
-      fs.writeFileSync(DB_FILE, JSON.stringify([]));
-    }
-    return JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
-  } catch (e) {
-    console.error('Database read error:', e);
-    return [];
+// PostgreSQL Database configuration
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres.ruqpnzakeltscxfhbxfs:%40Nikhil2262@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres';
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
   }
-}
-
-function saveUsers(users) {
-  try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(users, null, 2));
-  } catch (e) {
-    console.error('Database write error:', e);
-  }
-}
+});
 
 // Auth Middleware
 function authenticateToken(req, res, next) {
@@ -69,20 +57,22 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
     
-    const users = getUsers();
-    if (users.find(u => u.email === email)) {
+    const checkUser = await pool.query('SELECT email FROM users WHERE email = $1', [email]);
+    if (checkUser.rows.length > 0) {
       return res.status(400).json({ error: 'User already exists' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = { id: Date.now().toString(), email, password: hashedPassword, name: name || email };
-    
-    users.push(newUser);
-    saveUsers(users);
+    const insertUser = await pool.query(
+      'INSERT INTO users (email, password, name) VALUES ($1, $2, $3) RETURNING id, email, name',
+      [email, hashedPassword, name || email]
+    );
+    const newUser = insertUser.rows[0];
 
     const token = jwt.sign({ id: newUser.id, email: newUser.email }, JWT_SECRET, { expiresIn: '24h' });
     res.status(201).json({ success: true, token, user: { email: newUser.email, name: newUser.name } });
   } catch (error) {
+    console.error('Registration error:', error);
     res.status(500).json({ error: 'Registration failed' });
   }
 });
@@ -90,8 +80,8 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const users = getUsers();
-    const user = users.find(u => u.email === email);
+    const fetchUser = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const user = fetchUser.rows[0];
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -100,6 +90,7 @@ app.post('/api/auth/login', async (req, res) => {
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '24h' });
     res.json({ success: true, token, user: { email: user.email, name: user.name } });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
