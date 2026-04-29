@@ -142,9 +142,66 @@ footer strong{color:var(--green)}
 
 .hidden{display:none!important}
 #upload-section{padding-bottom:1.5rem}
+
+/* AUTH MODAL */
+#auth-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(26,28,23,0.8);backdrop-filter:blur(4px);z-index:1000;display:flex;align-items:center;justify-content:center}
+.auth-box{background:var(--surface);border-radius:var(--radius-lg);padding:2.5rem;width:100%;max-width:400px;border:1px solid var(--border);box-shadow:0 20px 40px rgba(0,0,0,0.1)}
+.auth-box h2{font-size:1.5rem;font-weight:700;color:var(--text);margin-bottom:0.5rem;letter-spacing:-0.02em}
+.auth-box p{font-size:13px;color:var(--muted);margin-bottom:1.5rem}
+.form-group{margin-bottom:1.25rem}
+.form-group label{display:block;font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em}
+.form-group input{width:100%;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);font-family:inherit;font-size:14px;background:var(--bg);color:var(--text);transition:border-color 0.2s}
+.form-group input:focus{outline:none;border-color:var(--green-mid)}
+.auth-btn{width:100%;background:var(--green);color:#fff;border:none;padding:12px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:background 0.2s;font-family:inherit}
+.auth-btn:hover{background:#27500A}
+.auth-toggle{text-align:center;margin-top:1.25rem;font-size:13px;color:var(--muted)}
+.auth-toggle span{color:var(--green);font-weight:600;cursor:pointer;text-decoration:underline}
+.auth-toggle span:hover{color:#27500A}
+#user-profile{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text)}
+#logout-btn{background:transparent;border:1px solid var(--border);padding:4px 12px;border-radius:var(--radius-sm);font-size:11px;color:var(--muted);cursor:pointer}
+#logout-btn:hover{border-color:var(--red);color:var(--red)}
 </style>
 </head>
 <body>
+
+<!-- AUTH OVERLAY -->
+<div id="auth-overlay">
+  <div class="auth-box">
+    <div id="login-form-view">
+      <h2>Welcome to Aarogya</h2>
+      <p>Please log in to continue report interpretation.</p>
+      <div class="form-group">
+        <label for="login-email">Email Address</label>
+        <input type="email" id="login-email" placeholder="name@example.com">
+      </div>
+      <div class="form-group">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" placeholder="••••••••">
+      </div>
+      <button class="auth-btn" onclick="handleLogin()">Log In</button>
+      <p class="auth-toggle">Don't have an account? <span onclick="toggleAuthView(true)">Register</span></p>
+    </div>
+
+    <div id="register-form-view" class="hidden">
+      <h2>Create an Account</h2>
+      <p>Sign up to access medical interpretations safely.</p>
+      <div class="form-group">
+        <label for="reg-name">Your Name</label>
+        <input type="text" id="reg-name" placeholder="John Doe">
+      </div>
+      <div class="form-group">
+        <label for="reg-email">Email Address</label>
+        <input type="email" id="reg-email" placeholder="name@example.com">
+      </div>
+      <div class="form-group">
+        <label for="reg-password">Password</label>
+        <input type="password" id="reg-password" placeholder="••••••••">
+      </div>
+      <button class="auth-btn" onclick="handleRegister()">Sign Up</button>
+      <p class="auth-toggle">Already have an account? <span onclick="toggleAuthView(false)">Log In</span></p>
+    </div>
+  </div>
+</div>
 
 <!-- NAVIGATION -->
 <nav>
@@ -156,7 +213,11 @@ footer strong{color:var(--green)}
   </div>
   <div class="nav-right">
     <span class="nav-badge">AI Powered</span>
-    <button class="btn-nav" onclick="window.scrollTo({top:0,behavior:'smooth'})">Analyze Report</button>
+    <div id="user-profile" class="hidden">
+      <span id="user-name"></span>
+      <button id="logout-btn" onclick="handleLogout()">Log Out</button>
+    </div>
+    <button id="login-trigger-btn" class="btn-nav" onclick="showAuthModal()">Log In</button>
   </div>
 </nav>
 
@@ -261,6 +322,106 @@ HbA1c: 7.2%"></textarea>
   // API Configuration - Connects to backend server
   const API_BASE = '';
   let isAnalyzing = false;
+  let userToken = localStorage.getItem('aarogya_token') || null;
+  let userData = JSON.parse(localStorage.getItem('aarogya_user')) || null;
+
+  // Auth UI Controls
+  function showAuthModal() {
+    document.getElementById('auth-overlay').classList.remove('hidden');
+  }
+
+  function hideAuthModal() {
+    document.getElementById('auth-overlay').classList.add('hidden');
+  }
+
+  function toggleAuthView(toRegister) {
+    const loginView = document.getElementById('login-form-view');
+    const regView = document.getElementById('register-form-view');
+    if (toRegister) {
+      loginView.classList.add('hidden');
+      regView.classList.remove('hidden');
+    } else {
+      loginView.classList.remove('hidden');
+      regView.classList.add('hidden');
+    }
+  }
+
+  function updateAuthUI() {
+    const profile = document.getElementById('user-profile');
+    const loginBtn = document.getElementById('login-trigger-btn');
+    const userName = document.getElementById('user-name');
+
+    if (userToken && userData) {
+      profile.classList.remove('hidden');
+      loginBtn.classList.add('hidden');
+      userName.innerText = `Hello, ${userData.name}`;
+      hideAuthModal();
+    } else {
+      profile.classList.add('hidden');
+      loginBtn.classList.remove('hidden');
+      showAuthModal();
+    }
+  }
+
+  async function handleLogin() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value.trim();
+    if (!email || !password) return alert('Email and password required');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Login failed');
+      
+      localStorage.setItem('aarogya_token', data.token);
+      localStorage.setItem('aarogya_user', JSON.stringify(data.user));
+      userToken = data.token;
+      userData = data.user;
+      updateAuthUI();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  async function handleRegister() {
+    const name = document.getElementById('reg-name').value.trim();
+    const email = document.getElementById('reg-email').value.trim();
+    const password = document.getElementById('reg-password').value.trim();
+    if (!email || !password) return alert('Email and password required');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Registration failed');
+
+      localStorage.setItem('aarogya_token', data.token);
+      localStorage.setItem('aarogya_user', JSON.stringify(data.user));
+      userToken = data.token;
+      userData = data.user;
+      updateAuthUI();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('aarogya_token');
+    localStorage.removeItem('aarogya_user');
+    userToken = null;
+    userData = null;
+    updateAuthUI();
+  }
+
+  // Check session
+  window.addEventListener('DOMContentLoaded', updateAuthUI);
 
   async function analyzeReport() {
     if (isAnalyzing) return;
@@ -284,7 +445,8 @@ HbA1c: 7.2%"></textarea>
       const res = await fetch(`${API_BASE}/api/analyze`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
         },
         body: JSON.stringify({ text })
       });
@@ -323,6 +485,9 @@ HbA1c: 7.2%"></textarea>
 
       const res = await fetch(`${API_BASE}/api/analyze-file`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${userToken}`
+        },
         body: formData
       });
 
