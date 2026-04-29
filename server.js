@@ -404,6 +404,4 @@ process.on('SIGTERM', () => {
   console.log('SIGTERM received. Shutting down gracefully...');
   process.exit(0);
 });
-console.log("API KEY:", API_KEY);
-
 module.exports = app;
