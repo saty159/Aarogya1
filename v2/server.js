@@ -18,12 +18,16 @@ const PORT = process.env.PORT || 5000;
 const API_KEY = process.env.GEMINI_API_KEY || process.env.ANTHROPIC_API_KEY;
 const JWT_SECRET = process.env.JWT_SECRET || 'aarogya_secret_key_2026';
 
-const { createClient } = require('@supabase/supabase-js');
+const { Pool } = require('pg');
 
-// Supabase Database configuration
-const SUPABASE_URL = process.env.SUPABASE_URL || 'your-supabase-url';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'your-supabase-anon-key';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// PostgreSQL Supabase Database configuration
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres.ruqpnzakeltscxfhbxfs:%40Nikhil2262@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres';
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false // Required for connecting to cloud databases like Supabase
+  }
+});
 
 // Auth Middleware
 function authenticateToken(req, res, next) {
@@ -53,27 +57,22 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
     
-    // Check if user exists in Supabase
-    const { data: existingUser, error: fetchError } = await supabase
-      .from('users')
-      .select('email')
-      .eq('email', email)
-      .single();
+    // Check if user exists
+    const checkUser = await pool.query('SELECT email FROM users WHERE email = $1', [email]);
 
-    if (existingUser) {
+    if (checkUser.rows.length > 0) {
       return res.status(400).json({ error: 'User already exists' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     
-    // Insert into Supabase
-    const { data: newUser, error: insertError } = await supabase
-      .from('users')
-      .insert([{ email, password: hashedPassword, name: name || email }])
-      .select()
-      .single();
+    // Insert into Database
+    const insertUser = await pool.query(
+      'INSERT INTO users (email, password, name) VALUES ($1, $2, $3) RETURNING id, email, name',
+      [email, hashedPassword, name || email]
+    );
 
-    if (insertError) throw insertError;
+    const newUser = insertUser.rows[0];
 
     const token = jwt.sign({ id: newUser.id, email: newUser.email }, JWT_SECRET, { expiresIn: '24h' });
     res.status(201).json({ success: true, token, user: { email: newUser.email, name: newUser.name } });
@@ -87,12 +86,9 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    // Get user from Supabase
-    const { data: user, error: fetchError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .single();
+    // Get user from Database
+    const fetchUser = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const user = fetchUser.rows[0];
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: 'Invalid email or password' });
