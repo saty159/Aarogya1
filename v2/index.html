@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aarogya — AI Medical Report Explainer</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F5F7F2;--surface:#FFFFFF;--surface2:#EDF0E8;
+  --text:#1A1C17;--muted:#6A6E60;--border:#DDE2D5;
+  --green:#3B6D11;--green-light:#EAF3DE;--green-mid:#639922;
+  --teal:#0F6E56;--teal-light:#E1F5EE;--teal-mid:#1D9E75;
+  --amber:#854F0B;--amber-light:#FAEEDA;
+  --red:#A32D2D;--red-light:#FCEBEB;
+  --blue:#185FA5;--blue-light:#E6F1FB;
+  --radius:12px;--radius-sm:8px;--radius-lg:16px;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+
+/* NAV */
+nav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:64px;position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-icon{width:38px;height:38px;background:var(--green);border-radius:10px;display:flex;align-items:center;justify-content:center}
+.logo-icon svg{width:22px;height:22px;fill:none;stroke:#fff;stroke-width:2}
+.logo-text{font-size:1.25rem;font-weight:700;color:var(--text);letter-spacing:-0.02em}
+.logo-text span{color:var(--green)}
+.nav-badge{background:var(--green-light);color:var(--green);font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:0.06em;text-transform:uppercase}
+.nav-right{display:flex;align-items:center;gap:1rem}
+.btn-nav{background:var(--green);color:#fff;border:none;padding:8px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:background 0.2s;font-family:inherit}
+.btn-nav:hover{background:#27500A}
+
+/* HERO */
+.hero{padding:3.5rem 2rem 2.5rem;text-align:center;max-width:680px;margin:0 auto}
+.hero-tag{display:inline-flex;align-items:center;gap:7px;background:var(--green-light);color:var(--green);font-size:12px;font-weight:700;padding:5px 14px;border-radius:20px;margin-bottom:1.5rem;letter-spacing:0.07em;text-transform:uppercase}
+.hero-tag::before{content:'';width:7px;height:7px;background:var(--green-mid);border-radius:50%}
+.hero h1{font-size:clamp(1.9rem,4.5vw,2.8rem);font-weight:700;line-height:1.18;color:var(--text);margin-bottom:1rem;letter-spacing:-0.03em}
+.hero h1 span{color:var(--green)}
+.hindi-tag{font-size:13px;color:var(--muted);margin-bottom:1rem;font-style:italic}
+.hero p{font-size:1rem;color:var(--muted);max-width:500px;margin:0 auto 2rem;line-height:1.7}
+
+/* UPLOAD ZONE */
+.upload-zone{background:var(--surface);border:2px dashed var(--border);border-radius:var(--radius-lg);padding:2.2rem;text-align:center;cursor:pointer;transition:all 0.22s;max-width:640px;margin:0 auto}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--green-mid);background:var(--green-light)}
+.upload-icon{width:50px;height:50px;background:var(--green-light);border-radius:13px;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem}
+.upload-icon svg{width:24px;height:24px;stroke:var(--green);fill:none;stroke-width:1.9}
+.upload-zone h3{font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px}
+.upload-zone p{font-size:13px;color:var(--muted)}
+.file-types{display:flex;gap:7px;justify-content:center;margin-top:1rem;flex-wrap:wrap}
+.file-tag{background:var(--surface2);color:var(--muted);font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px;border:1px solid var(--border)}
+
+/* DIVIDER */
+.or-divider{display:flex;align-items:center;gap:1rem;max-width:640px;margin:1.4rem auto;color:var(--muted);font-size:13px}
+.or-divider::before,.or-divider::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* TEXTAREA */
+.text-area-wrap{max-width:640px;margin:0 auto}
+textarea{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.2rem;font-family:inherit;font-size:14px;color:var(--text);resize:vertical;min-height:130px;line-height:1.65;transition:border-color 0.2s;outline:none}
+textarea:focus{border-color:var(--green-mid)}
+textarea::placeholder{color:#B4B2A9}
+
+/* ANALYZE BTN */
+.analyze-btn{display:block;width:100%;max-width:640px;margin:1.2rem auto 0;background:var(--green);color:#fff;border:none;padding:14px 24px;border-radius:var(--radius);font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:all 0.2s;letter-spacing:0.01em}
+.analyze-btn:hover{background:#27500A;transform:translateY(-1px)}
+.analyze-btn:disabled{background:#B4B2A9;cursor:not-allowed;transform:none}
+
+/* FEATURES */
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;max-width:640px;margin:2rem auto 0}
+.feature-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.1rem}
+.feat-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;margin-bottom:9px}
+.feat-icon svg{width:17px;height:17px;stroke-width:1.9;fill:none}
+.feat-icon.g{background:var(--green-light)} .feat-icon.g svg{stroke:var(--green)}
+.feat-icon.b{background:var(--blue-light)} .feat-icon.b svg{stroke:var(--blue)}
+.feat-icon.a{background:var(--amber-light)} .feat-icon.a svg{stroke:var(--amber)}
+.feature-card h5{font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px}
+.feature-card p{font-size:12px;color:var(--muted);line-height:1.5}
+
+/* LOADING */
+.loading-wrap{text-align:center;padding:3rem 2rem;max-width:640px;margin:0 auto}
+.pulse-ring{width:54px;height:54px;border:3px solid var(--green-light);border-top-color:var(--green);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 1.5rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-wrap h3{font-size:1.25rem;font-weight:700;color:var(--text);margin-bottom:6px}
+.loading-wrap p{font-size:13px;color:var(--muted)}
+.loading-steps{display:flex;flex-direction:column;gap:8px;margin-top:1.5rem;text-align:left;max-width:300px;margin-left:auto;margin-right:auto}
+.l-step{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--border)}
+.l-step.active{color:var(--text);font-weight:600;border-color:var(--green-mid)}
+.l-step.done{color:var(--green);border-color:var(--green-light)}
+.l-step.done::before{content:'✓';font-size:11px;color:var(--green)}
+
+/* RESULTS */
+.results-wrap{max-width:880px;margin:2rem auto;padding:0 1.5rem 4rem}
+.results-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:10px}
+.results-header h2{font-size:1.5rem;font-weight:700;color:var(--text)}
+.back-btn{background:none;border:1px solid var(--border);color:var(--muted);padding:7px 16px;border-radius:var(--radius-sm);font-family:inherit;font-size:13px;cursor:pointer;transition:all 0.2s}
+.back-btn:hover{border-color:var(--green);color:var(--green)}
+
+/* SUMMARY CARD */
+.summary-card{background:var(--green);border-radius:var(--radius-lg);padding:1.75rem 2rem;margin-bottom:1.4rem;color:#fff}
+.summary-card .label{font-size:10px;font-weight:700;letter-spacing:0.12em;opacity:0.75;margin-bottom:6px;text-transform:uppercase}
+.summary-card h3{font-size:1.3rem;font-weight:700;line-height:1.3;margin-bottom:8px}
+.summary-card p{font-size:14px;opacity:0.92;line-height:1.7}
+.status-pill{display:inline-block;margin-top:12px;background:rgba(255,255,255,0.2);color:#fff;font-size:12px;font-weight:700;padding:4px 14px;border-radius:20px}
+
+/* METRICS */
+.status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin-bottom:1.4rem}
+.status-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.1rem}
+.status-card .s-label{font-size:10px;font-weight:700;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px;text-transform:uppercase}
+.status-card .s-val{font-size:1.25rem;font-weight:700;color:var(--text)}
+.status-card .s-note{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;margin-top:6px}
+.badge.normal{background:var(--green-light);color:var(--green)}
+.badge.high{background:var(--red-light);color:var(--red)}
+.badge.low{background:var(--amber-light);color:var(--amber)}
+.badge.review{background:var(--blue-light);color:var(--blue)}
+
+/* FINDINGS */
+.findings-section{margin-bottom:1.4rem}
+.findings-section h4{font-size:11px;font-weight:700;letter-spacing:0.09em;color:var(--muted);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.findings-section h4::after{content:'';flex:1;height:1px;background:var(--border)}
+.finding-item{background:var(--surface);border:1px solid var(--border);border-left:3px solid transparent;border-radius:0 var(--radius) var(--radius) 0;padding:1.1rem 1.25rem;margin-bottom:8px}
+.finding-item.normal-l{border-left-color:var(--green-mid)}
+.finding-item.warn-l{border-left-color:var(--amber)}
+.finding-item.alert-l{border-left-color:var(--red)}
+.finding-item.info-l{border-left-color:var(--blue)}
+.finding-title{font-weight:700;font-size:14px;color:var(--text);margin-bottom:4px}
+.finding-desc{font-size:13px;color:var(--muted);line-height:1.65}
+
+/* ACTIONS */
+.action-list{list-style:none;display:flex;flex-direction:column;gap:8px;counter-reset:li}
+.action-list li{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px 10px 40px;font-size:13px;color:var(--text);position:relative;line-height:1.55;counter-increment:li}
+.action-list li::before{content:counter(li);position:absolute;left:12px;top:50%;transform:translateY(-50%);width:18px;height:18px;border-radius:50%;background:var(--green-light);color:var(--green);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:18px;text-align:center}
+
+/* DISCLAIMER */
+.disclaimer{background:var(--amber-light);border:1px solid #FAC775;border-radius:var(--radius);padding:1rem 1.25rem;margin-top:1.5rem;display:flex;gap:10px;align-items:flex-start}
+.disclaimer svg{width:17px;height:17px;min-width:17px;stroke:var(--amber);fill:none;stroke-width:2;margin-top:2px}
+.disclaimer p{font-size:12px;color:#412402;line-height:1.6}
+
+/* FOOTER */
+footer{text-align:center;padding:1.5rem;border-top:1px solid var(--border);background:var(--surface)}
+footer p{font-size:12px;color:var(--muted)}
+footer strong{color:var(--green)}
+
+.hidden{display:none!important}
+#upload-section{padding-bottom:1.5rem}
+
+/* AUTH MODAL */
+#auth-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(26,28,23,0.8);backdrop-filter:blur(4px);z-index:1000;display:flex;align-items:center;justify-content:center}
+.auth-box{background:var(--surface);border-radius:var(--radius-lg);padding:2.5rem;width:100%;max-width:400px;border:1px solid var(--border);box-shadow:0 20px 40px rgba(0,0,0,0.1)}
+.auth-box h2{font-size:1.5rem;font-weight:700;color:var(--text);margin-bottom:0.5rem;letter-spacing:-0.02em}
+.auth-box p{font-size:13px;color:var(--muted);margin-bottom:1.5rem}
+.form-group{margin-bottom:1.25rem}
+.form-group label{display:block;font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em}
+.form-group input{width:100%;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);font-family:inherit;font-size:14px;background:var(--bg);color:var(--text);transition:border-color 0.2s}
+.form-group input:focus{outline:none;border-color:var(--green-mid)}
+.auth-btn{width:100%;background:var(--green);color:#fff;border:none;padding:12px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:background 0.2s;font-family:inherit}
+.auth-btn:hover{background:#27500A}
+.auth-toggle{text-align:center;margin-top:1.25rem;font-size:13px;color:var(--muted)}
+.auth-toggle span{color:var(--green);font-weight:600;cursor:pointer;text-decoration:underline}
+.auth-toggle span:hover{color:#27500A}
+#user-profile{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text)}
+#logout-btn{background:transparent;border:1px solid var(--border);padding:4px 12px;border-radius:var(--radius-sm);font-size:11px;color:var(--muted);cursor:pointer}
+#logout-btn:hover{border-color:var(--red);color:var(--red)}
+</style>
+</head>
+<body>
+
+<!-- AUTH OVERLAY -->
+<div id="auth-overlay">
+  <div class="auth-box">
+    <div id="login-form-view">
+      <h2>Welcome to Aarogya</h2>
+      <p>Please log in to continue report interpretation.</p>
+      <div class="form-group">
+        <label for="login-email">Email Address</label>
+        <input type="email" id="login-email" placeholder="name@example.com">
+      </div>
+      <div class="form-group">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" placeholder="••••••••">
+      </div>
+      <button class="auth-btn" onclick="handleLogin()">Log In</button>
+      <p class="auth-toggle">Don't have an account? <span onclick="toggleAuthView(true)">Register</span></p>
+    </div>
+
+    <div id="register-form-view" class="hidden">
+      <h2>Create an Account</h2>
+      <p>Sign up to access medical interpretations safely.</p>
+      <div class="form-group">
+        <label for="reg-name">Your Name</label>
+        <input type="text" id="reg-name" placeholder="John Doe">
+      </div>
+      <div class="form-group">
+        <label for="reg-email">Email Address</label>
+        <input type="email" id="reg-email" placeholder="name@example.com">
+      </div>
+      <div class="form-group">
+        <label for="reg-password">Password</label>
+        <input type="password" id="reg-password" placeholder="••••••••">
+      </div>
+      <button class="auth-btn" onclick="handleRegister()">Sign Up</button>
+      <p class="auth-toggle">Already have an account? <span onclick="toggleAuthView(false)">Log In</span></p>
+    </div>
+  </div>
+</div>
+
+<!-- NAVIGATION -->
+<nav>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24"><path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+    </div>
+    <span class="logo-text">Aa<span>rogya</span></span>
+  </div>
+  <div class="nav-right">
+    <span class="nav-badge">AI Powered</span>
+    <div id="user-profile" class="hidden">
+      <span id="user-name"></span>
+      <button id="logout-btn" onclick="handleLogout()">Log Out</button>
+    </div>
+    <button id="login-trigger-btn" class="btn-nav" onclick="showAuthModal()">Log In</button>
+  </div>
+</nav>
+
+<!-- UPLOAD SECTION -->
+<div id="upload-section">
+  <div class="hero">
+    <div class="hero-tag">Medical Report Explainer</div>
+    <h1>Understand your health reports<br><span>simply &amp; clearly</span></h1>
+    <p class="hindi-tag">आपकी सेहत, आपकी भाषा में — Your health, in your language</p>
+    <p>Paste your blood test, lab report, prescription, or scan summary. Aarogya explains every value in plain, simple language — no medical background needed.</p>
+  </div>
+
+  <div style="max-width:640px;margin:0 auto;padding:0 1.5rem">
+
+    <!-- DRAG & DROP -->
+    <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <input type="file" id="fileInput" accept=".txt,.pdf,.jpg,.png" style="display:none">
+      <div class="upload-icon">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      </div>
+      <h3>Drop your report file here</h3>
+      <p>Upload a PDF, image, or text file of your medical report</p>
+      <div class="file-types">
+        <span class="file-tag">PDF</span>
+        <span class="file-tag">JPG / PNG</span>
+        <span class="file-tag">TXT</span>
+      </div>
+    </div>
+
+    <div class="or-divider">or paste your report text below</div>
+
+    <!-- TEXT INPUT -->
+    <div class="text-area-wrap">
+      <textarea id="reportText" rows="6" placeholder="Paste your lab results, blood test values, prescription, or any medical text here...
+
+Example:
+Haemoglobin: 11.2 g/dL
+WBC: 12,500 /μL
+Blood Glucose (Fasting): 145 mg/dL
+Cholesterol (Total): 220 mg/dL
+HbA1c: 7.2%"></textarea>
+    </div>
+
+    <button class="analyze-btn" id="analyzeBtn" onclick="analyzeReport()">Analyze My Report →</button>
+
+    <!-- FEATURE CARDS -->
+    <div class="features">
+      <div class="feature-card">
+        <div class="feat-icon g">
+          <svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <h5>Plain language</h5>
+        <p>Every value explained simply — no jargon</p>
+      </div>
+      <div class="feature-card">
+        <div class="feat-icon b">
+          <svg viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        </div>
+        <h5>Normal range check</h5>
+        <p>See which values are healthy and which need attention</p>
+      </div>
+      <div class="feature-card">
+        <div class="feat-icon a">
+          <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        </div>
+        <h5>Next steps guide</h5>
+        <p>Know exactly what to discuss with your doctor</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- LOADING STATE -->
+<div id="loading-section" class="hidden loading-wrap">
+  <div class="pulse-ring"></div>
+  <h3>Analyzing your report…</h3>
+  <p>Aarogya is reading and interpreting your medical data</p>
+  <div class="loading-steps">
+    <div class="l-step active" id="step1">Reading report values</div>
+    <div class="l-step" id="step2">Checking normal ranges</div>
+    <div class="l-step" id="step3">Writing plain-language summary</div>
+    <div class="l-step" id="step4">Preparing your action plan</div>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div id="results-section" class="results-wrap hidden">
+  <div class="results-header">
+    <h2>Your Report Explained</h2>
+    <button class="back-btn" onclick="resetUI()">← Analyze another report</button>
+  </div>
+  <div id="results-content"></div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <p><strong>Aarogya</strong> — AI-powered medical report explainer. Always consult your doctor for medical advice. &copy; 2026</p>
+</footer>
+
+<script>
+  // API Configuration - Connects to backend server
+  const API_BASE = '';
+  let isAnalyzing = false;
+  let userToken = localStorage.getItem('aarogya_token') || null;
+  let userData = JSON.parse(localStorage.getItem('aarogya_user')) || null;
+
+  // Auth UI Controls
+  function showAuthModal() {
+    document.getElementById('auth-overlay').classList.remove('hidden');
+  }
+
+  function hideAuthModal() {
+    document.getElementById('auth-overlay').classList.add('hidden');
+  }
+
+  function toggleAuthView(toRegister) {
+    const loginView = document.getElementById('login-form-view');
+    const regView = document.getElementById('register-form-view');
+    if (toRegister) {
+      loginView.classList.add('hidden');
+      regView.classList.remove('hidden');
+    } else {
+      loginView.classList.remove('hidden');
+      regView.classList.add('hidden');
+    }
+  }
+
+  function updateAuthUI() {
+    const profile = document.getElementById('user-profile');
+    const loginBtn = document.getElementById('login-trigger-btn');
+    const userName = document.getElementById('user-name');
+
+    if (userToken && userData) {
+      profile.classList.remove('hidden');
+      loginBtn.classList.add('hidden');
+      userName.innerText = `Hello, ${userData.name}`;
+      hideAuthModal();
+    } else {
+      profile.classList.add('hidden');
+      loginBtn.classList.remove('hidden');
+      showAuthModal();
+    }
+  }
+
+  async function handleLogin() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value.trim();
+    if (!email || !password) return alert('Email and password required');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Login failed');
+      
+      localStorage.setItem('aarogya_token', data.token);
+      localStorage.setItem('aarogya_user', JSON.stringify(data.user));
+      userToken = data.token;
+      userData = data.user;
+      updateAuthUI();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  async function handleRegister() {
+    const name = document.getElementById('reg-name').value.trim();
+    const email = document.getElementById('reg-email').value.trim();
+    const password = document.getElementById('reg-password').value.trim();
+    if (!email || !password) return alert('Email and password required');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Registration failed');
+
+      localStorage.setItem('aarogya_token', data.token);
+      localStorage.setItem('aarogya_user', JSON.stringify(data.user));
+      userToken = data.token;
+      userData = data.user;
+      updateAuthUI();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('aarogya_token');
+    localStorage.removeItem('aarogya_user');
+    userToken = null;
+    userData = null;
+    updateAuthUI();
+  }
+
+  // Check session
+  window.addEventListener('DOMContentLoaded', updateAuthUI);
+
+  async function analyzeReport() {
+    if (isAnalyzing) return;
+    const text = document.getElementById('reportText').value.trim();
+    if (!text) { alert('Please paste your medical report text first.'); return; }
+
+    isAnalyzing = true;
+    document.getElementById('analyzeBtn').disabled = true;
+    document.getElementById('upload-section').classList.add('hidden');
+    document.getElementById('loading-section').classList.remove('hidden');
+    animateSteps();
+
+    try {
+      // Check if backend is running
+      const healthRes = await fetch(`${API_BASE}/api/health`);
+      if (!healthRes.ok) {
+        throw new Error('Backend server is not running. Please start the server with: npm start');
+      }
+
+      // Send analysis request to backend
+      const res = await fetch(`${API_BASE}/api/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
+        body: JSON.stringify({ text })
+      });
+
+      const data = await res.json();
+      
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Analysis failed');
+      }
+
+      showResults(data.data);
+    } catch (e) {
+      document.getElementById('loading-section').classList.add('hidden');
+      document.getElementById('upload-section').classList.remove('hidden');
+      document.getElementById('analyzeBtn').disabled = false;
+      alert('Error: ' + (e.message || 'Something went wrong. Please try again.'));
+      console.error('Analysis error:', e);
+    } finally {
+      isAnalyzing = false;
+    }
+  }
+
+  // File upload handler
+  async function uploadAndAnalyzeFile(file) {
+    if (!file || isAnalyzing) return;
+
+    isAnalyzing = true;
+    document.getElementById('analyzeBtn').disabled = true;
+    document.getElementById('upload-section').classList.add('hidden');
+    document.getElementById('loading-section').classList.remove('hidden');
+    animateSteps();
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${API_BASE}/api/analyze-file`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${userToken}`
+        },
+        body: formData
+      });
+
+      const data = await res.json();
+      
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'File analysis failed');
+      }
+
+      showResults(data.data);
+    } catch (e) {
+      document.getElementById('loading-section').classList.add('hidden');
+      document.getElementById('upload-section').classList.remove('hidden');
+      document.getElementById('analyzeBtn').disabled = false;
+      alert('Error: ' + (e.message || 'Something went wrong. Please try again.'));
+      console.error('File upload error:', e);
+    } finally {
+      isAnalyzing = false;
+    }
+  }
+
+  function animateSteps() {
+    const ids = ['step1', 'step2', 'step3', 'step4'];
+    let i = 0;
+    const iv = setInterval(() => {
+      if (i > 0) {
+        const p = document.getElementById(ids[i - 1]);
+        p.classList.remove('active');
+        p.classList.add('done');
+      }
+      if (i < ids.length) {
+        document.getElementById(ids[i]).classList.add('active');
+        i++;
+      } else {
+        clearInterval(iv);
+      }
+    }, 950);
+  }
+
+  function showResults(r) {
+    document.getElementById('loading-section').classList.add('hidden');
+    const sec = document.getElementById('results-section');
+    sec.classList.remove('hidden');
+
+    // Metrics
+    let metricsHTML = '';
+    if (r.metrics && r.metrics.length) {
+      metricsHTML = '<div class="status-grid">' + r.metrics.map(m =>
+        `<div class="status-card">
+          <div class="s-label">${esc(m.name)}</div>
+          <div class="s-val">${esc(m.value)}</div>
+          <div class="s-note">${esc(m.note)}</div>
+          <span class="badge ${m.status || 'review'}">${cap(m.status || 'review')}</span>
+        </div>`
+      ).join('') + '</div>';
+    }
+
+    // Findings
+    let findingsHTML = '';
+    const typeMap = { normal: 'normal-l', warning: 'warn-l', alert: 'alert-l', info: 'info-l' };
+    if (r.findings && r.findings.length) {
+      findingsHTML = `<div class="findings-section"><h4>Key Findings</h4>` +
+        r.findings.map(f =>
+          `<div class="finding-item ${typeMap[f.type] || 'info-l'}">
+            <div class="finding-title">${esc(f.title)}</div>
+            <div class="finding-desc">${esc(f.explanation)}</div>
+          </div>`
+        ).join('') + '</div>';
+    }
+
+    // Actions
+    let actionsHTML = '';
+    if (r.action_items && r.action_items.length) {
+      actionsHTML = `<div class="findings-section"><h4>Your Next Steps</h4>
+        <ul class="action-list">${r.action_items.map(a => `<li>${esc(a)}</li>`).join('')}</ul>
+      </div>`;
+    }
+
+    document.getElementById('results-content').innerHTML =
+      `<div class="summary-card">
+        <div class="label">Report Type</div>
+        <h3>${esc(r.title)}</h3>
+        <p>${esc(r.overall_summary)}</p>
+        <span class="status-pill">${esc(r.overall_status)}</span>
+      </div>` +
+      metricsHTML + findingsHTML + actionsHTML +
+      `<div class="disclaimer">
+        <svg viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        <p><strong>Important:</strong> Aarogya's explanations are for educational purposes only and do not replace professional medical advice. Always consult your doctor or qualified healthcare provider before making any health decisions.</p>
+      </div>`;
+
+    sec.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function resetUI() {
+    document.getElementById('results-section').classList.add('hidden');
+    document.getElementById('upload-section').classList.remove('hidden');
+    document.getElementById('analyzeBtn').disabled = false;
+    document.getElementById('reportText').value = '';
+    ['step1', 'step2', 'step3', 'step4'].forEach((id, i) => {
+      const el = document.getElementById(id);
+      el.classList.remove('active', 'done');
+      if (i === 0) el.classList.add('active');
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function esc(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function cap(s) {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  // Drag & Drop
+  const dz = document.getElementById('dropZone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('drag');
+    const f = e.dataTransfer.files[0];
+    if (f) {
+      if (f.type === 'text/plain') {
+        // For text files, read locally and analyze
+        const r = new FileReader();
+        r.onload = ev => document.getElementById('reportText').value = ev.target.result;
+        r.readAsText(f);
+      } else if (f.type === 'application/pdf' || f.type.startsWith('image/')) {
+        // For PDF and images, send to backend for processing
+        uploadAndAnalyzeFile(f);
+      } else {
+        alert('For image/PDF files, please copy and paste the text content into the text area below.');
+      }
+    }
+  });
+
+  document.getElementById('fileInput').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (f) {
+      if (f.type === 'text/plain') {
+        // For text files, read locally and analyze
+        const r = new FileReader();
+        r.onload = ev => document.getElementById('reportText').value = ev.target.result;
+        r.readAsText(f);
+      } else if (f.type === 'application/pdf' || f.type.startsWith('image/')) {
+        // For PDF and images, send to backend for processing
+        uploadAndAnalyzeFile(f);
+      } else {
+        alert('For image/PDF files, please copy and paste the text content into the text area below.');
+      }
+    }
+    e.target.value = '';
+  });
+</script>
+
+</body>
+</html>
