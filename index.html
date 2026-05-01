@@ -415,7 +415,7 @@ Example Prescription:
       document.getElementById('reminders-section').classList.remove('hidden');
     } else {
       profile.classList.add('hidden');
-      loginBtn.classList.add('hidden');
+      loginBtn.classList.remove('hidden');
       document.getElementById('reminders-section').classList.add('hidden');
       showAuthModal();
     }
@@ -716,8 +716,9 @@ Example Prescription:
       });
 
       if (res.status === 401 || res.status === 403) {
+        const errData = await res.json();
         handleLogout();
-        throw new Error('Your session has expired. Please log in again.');
+        throw new Error(errData.error || 'Your session has expired. Please log in again.');
       }
 
       const data = await res.json();
@@ -761,8 +762,9 @@ Example Prescription:
       });
 
       if (res.status === 401 || res.status === 403) {
+        const errData = await res.json();
         handleLogout();
-        throw new Error('Your session has expired. Please log in again.');
+        throw new Error(errData.error || 'Your session has expired. Please log in again.');
       }
 
       const data = await res.json();

@@ -393,10 +393,11 @@ app.post('/api/analyze', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Analysis error:', error.message);
 
-    // Handle specific error types
+    // Handle specific error types (Gemini API issues)
     if (error.response?.status === 401 || error.response?.status === 400) {
-      return res.status(401).json({
-        error: 'Invalid API key. Check your API key in .env file'
+      console.error('❌ Gemini API Auth Error: Please check your GEMINI_API_KEY in .env or Vercel settings');
+      return res.status(500).json({
+        error: 'Medical Analysis Engine Error: Invalid API configuration on server.'
       });
     }
 
