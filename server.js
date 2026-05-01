@@ -44,7 +44,7 @@ async function initDB() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS reminders (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         medicine_name TEXT NOT NULL,
         dosage TEXT,
         note TEXT,
