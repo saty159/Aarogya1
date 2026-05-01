@@ -8,9 +8,22 @@ const path = require('path');
 const pdfParse = require('pdf-parse');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const webPush = require('web-push');
 
 // Load environment variables
 dotenv.config();
+
+// VAPID keys for Web Push
+const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+
+if (vapidPublicKey && vapidPrivateKey) {
+  webPush.setVapidDetails(
+    'mailto:support@aarogya.in',
+    vapidPublicKey,
+    vapidPrivateKey
+  );
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -31,12 +44,18 @@ const pool = new Pool({
 // Initialize Database Tables
 async function initDB() {
   try {
+    // Migration: Ensure columns exist for existing tables (Run first to avoid issues)
+    await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS push_subscription TEXT;');
+    await pool.query('ALTER TABLE reminders ADD COLUMN IF NOT EXISTS remind_at TIMESTAMP;');
+    await pool.query('ALTER TABLE reminders ADD COLUMN IF NOT EXISTS notified BOOLEAN DEFAULT FALSE;');
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         email TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
         name TEXT,
+        push_subscription TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -48,10 +67,12 @@ async function initDB() {
         medicine_name TEXT NOT NULL,
         dosage TEXT,
         note TEXT,
+        remind_at TIMESTAMP,
+        notified BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('✅ Database tables initialized');
+    console.log('✅ Database tables and migrations initialized');
   } catch (err) {
     console.error('❌ Database initialization failed:', err);
   }
@@ -127,12 +148,12 @@ app.post('/api/auth/login', async (req, res) => {
 // Reminder Endpoints
 app.post('/api/reminders', authenticateToken, async (req, res) => {
   try {
-    const { medicine_name, dosage, note } = req.body;
+    const { medicine_name, dosage, note, remind_at } = req.body;
     if (!medicine_name) return res.status(400).json({ error: 'Medicine name is required' });
 
     const result = await pool.query(
-      'INSERT INTO reminders (user_id, medicine_name, dosage, note) VALUES ($1, $2, $3, $4) RETURNING *',
-      [req.user.id, medicine_name, dosage, note]
+      'INSERT INTO reminders (user_id, medicine_name, dosage, note, remind_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [req.user.id, medicine_name, dosage, note, remind_at]
     );
     res.status(201).json({ success: true, reminder: result.rows[0] });
   } catch (error) {
@@ -164,6 +185,61 @@ app.delete('/api/reminders/:id', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to delete reminder' });
   }
 });
+
+// Push Subscription Endpoint
+app.post('/api/push/subscribe', authenticateToken, async (req, res) => {
+  try {
+    const { subscription } = req.body;
+    await pool.query(
+      'UPDATE users SET push_subscription = $1 WHERE id = $2',
+      [JSON.stringify(subscription), req.user.id]
+    );
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Push subscribe error:', error);
+    res.status(500).json({ error: 'Failed to subscribe' });
+  }
+});
+
+// Background Reminder Checker (runs every 60 seconds)
+setInterval(async () => {
+  try {
+    const now = new Date();
+    // Get reminders that are due and haven't been notified yet
+    const dueReminders = await pool.query(`
+      SELECT r.*, u.push_subscription 
+      FROM reminders r
+      JOIN users u ON r.user_id = u.id
+      WHERE r.remind_at <= $1 
+      AND r.notified = FALSE 
+      AND u.push_subscription IS NOT NULL
+    `, [now]);
+
+    for (const reminder of dueReminders.rows) {
+      const subscription = JSON.parse(reminder.push_subscription);
+      const payload = JSON.stringify({
+        title: 'Medicine Reminder: ' + reminder.medicine_name,
+        body: `It's time for your dose: ${reminder.dosage}. Note: ${reminder.note}`,
+        icon: '/favicon.ico'
+      });
+
+      try {
+        await webPush.sendNotification(subscription, payload);
+        // Mark as notified
+        await pool.query('UPDATE reminders SET notified = TRUE WHERE id = $1', [reminder.id]);
+        console.log(`Push notification sent for ${reminder.medicine_name}`);
+      } catch (err) {
+        console.error('Failed to send push notification:', err);
+        // If subscription is no longer valid, we might want to clear it
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          await pool.query('UPDATE users SET push_subscription = NULL WHERE id = $1', [reminder.user_id]);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Background worker error:', err);
+  }
+}, 60000);
 
 // Simple In-Memory Cache
 const analysisCache = new Map();
