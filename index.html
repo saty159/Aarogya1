@@ -310,6 +310,31 @@ Example Prescription:
   </div>
 </div>
 
+<!-- LOADING STATE -->
+<div id="loading-section" class="hidden loading-wrap">
+  <div class="pulse-ring"></div>
+  <h3>Analyzing your report…</h3>
+  <p>Aarogya is reading and interpreting your medical data</p>
+  <div class="loading-steps">
+    <div class="l-step active" id="step1">Reading report values</div>
+    <div class="l-step" id="step2">Checking normal ranges</div>
+    <div class="l-step" id="step3">Writing plain-language summary</div>
+    <div class="l-step" id="step4">Preparing your action plan</div>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div id="results-section" class="results-wrap hidden">
+  <div class="results-header">
+    <h2>Your Report Explained</h2>
+    <div style="display:flex;gap:10px">
+      <button class="back-btn" id="download-btn" style="background:var(--blue);color:white;border-color:var(--blue)" onclick="downloadPDF()">Download PDF ↓</button>
+      <button class="back-btn" onclick="resetUI()">← Analyze another</button>
+    </div>
+  </div>
+  <div id="results-content"></div>
+</div>
+
 <!-- REMINDERS SECTION -->
 <div id="reminders-section" class="reminders-wrap hidden">
   <div class="reminders-card">
@@ -340,30 +365,6 @@ Example Prescription:
   </div>
 </div>
 
-<!-- LOADING STATE -->
-<div id="loading-section" class="hidden loading-wrap">
-  <div class="pulse-ring"></div>
-  <h3>Analyzing your report…</h3>
-  <p>Aarogya is reading and interpreting your medical data</p>
-  <div class="loading-steps">
-    <div class="l-step active" id="step1">Reading report values</div>
-    <div class="l-step" id="step2">Checking normal ranges</div>
-    <div class="l-step" id="step3">Writing plain-language summary</div>
-    <div class="l-step" id="step4">Preparing your action plan</div>
-  </div>
-</div>
-
-<!-- RESULTS -->
-<div id="results-section" class="results-wrap hidden">
-  <div class="results-header">
-    <h2>Your Report Explained</h2>
-    <div style="display:flex;gap:10px">
-      <button class="back-btn" id="download-btn" style="background:var(--blue);color:white;border-color:var(--blue)" onclick="downloadPDF()">Download PDF ↓</button>
-      <button class="back-btn" onclick="resetUI()">← Analyze another</button>
-    </div>
-  </div>
-  <div id="results-content"></div>
-</div>
 
 <!-- FOOTER -->
 <footer>
