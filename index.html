@@ -224,10 +224,10 @@ footer strong{color:var(--green)}
 <!-- UPLOAD SECTION -->
 <div id="upload-section">
   <div class="hero">
-    <div class="hero-tag">Medical Report Explainer</div>
-    <h1>Understand your health reports<br><span>simply &amp; clearly</span></h1>
-    <p class="hindi-tag">आपकी सेहत, आपकी भाषा में — Your health, in your language</p>
-    <p>Paste your blood test, lab report, prescription, or scan summary. Aarogya explains every value in plain, simple language — no medical background needed.</p>
+    <div class="hero-tag">Report &amp; Prescription Explainer</div>
+    <h1>Understand your medical reports<br><span>simply &amp; clearly</span></h1>
+    <p class="hindi-tag">डॉक्टर की लिखावट और रिपोर्ट, अब समझना हुआ आसान</p>
+    <p>Upload your blood tests, lab reports, or <b>handwritten prescriptions</b>. Aarogya decipherers messy handwriting and explains everything in plain language.</p>
   </div>
 
   <div style="max-width:640px;margin:0 auto;padding:0 1.5rem">
@@ -251,14 +251,12 @@ footer strong{color:var(--green)}
 
     <!-- TEXT INPUT -->
     <div class="text-area-wrap">
-      <textarea id="reportText" rows="6" placeholder="Paste your lab results, blood test values, prescription, or any medical text here...
+      <textarea id="reportText" rows="6" placeholder="Paste report text or prescription details here...
 
-Example:
-Haemoglobin: 11.2 g/dL
-WBC: 12,500 /μL
-Blood Glucose (Fasting): 145 mg/dL
-Cholesterol (Total): 220 mg/dL
-HbA1c: 7.2%"></textarea>
+Example Prescription:
+- Tab. Azithromycin 500mg (1-0-1) x 3 days
+- Syr. Corex 5ml (TDS) x 5 days
+- Paracetamol 650mg (SOS)"></textarea>
     </div>
 
     <button class="analyze-btn" id="analyzeBtn" onclick="analyzeReport()">Analyze My Report →</button>
@@ -285,6 +283,13 @@ HbA1c: 7.2%"></textarea>
         </div>
         <h5>Next steps guide</h5>
         <p>Know exactly what to discuss with your doctor</p>
+      </div>
+      <div class="feature-card">
+        <div class="feat-icon g">
+          <svg viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+        </div>
+        <h5>Prescription Decipherer</h5>
+        <p>Reads messy handwriting and lists medicines clearly</p>
       </div>
     </div>
 
@@ -451,6 +456,11 @@ HbA1c: 7.2%"></textarea>
         body: JSON.stringify({ text })
       });
 
+      if (res.status === 401 || res.status === 403) {
+        handleLogout();
+        throw new Error('Your session has expired. Please log in again.');
+      }
+
       const data = await res.json();
       
       if (!res.ok || data.error) {
@@ -490,6 +500,11 @@ HbA1c: 7.2%"></textarea>
         },
         body: formData
       });
+
+      if (res.status === 401 || res.status === 403) {
+        handleLogout();
+        throw new Error('Your session has expired. Please log in again.');
+      }
 
       const data = await res.json();
       
