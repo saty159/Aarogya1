@@ -161,6 +161,17 @@ footer strong{color:var(--green)}
 #user-profile{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text)}
 #logout-btn{background:transparent;border:1px solid var(--border);padding:4px 12px;border-radius:var(--radius-sm);font-size:11px;color:var(--muted);cursor:pointer}
 #logout-btn:hover{border-color:var(--red);color:var(--red)}
+
+/* REMINDERS UI */
+.reminders-wrap{max-width:640px;margin:1.5rem auto;padding:0 1.5rem}
+.reminders-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem}
+.reminders-card h3{font-size:1.1rem;margin-bottom:1rem;display:flex;align-items:center;gap:8px}
+.reminder-item{background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.reminder-info h4{font-size:14px;color:var(--text)}
+.reminder-info p{font-size:12px;color:var(--muted)}
+.btn-delete{background:none;border:none;color:var(--red);cursor:pointer;padding:4px}
+.btn-add-reminder{background:var(--teal-light);color:var(--teal);border:none;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;margin-top:5px}
+.btn-add-reminder:hover{background:var(--teal-mid);color:#fff}
 </style>
 </head>
 <body>
@@ -297,6 +308,19 @@ Example Prescription:
   </div>
 </div>
 
+<!-- REMINDERS SECTION -->
+<div id="reminders-section" class="reminders-wrap hidden">
+  <div class="reminders-card">
+    <h3>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      Your Medicine Reminders
+    </h3>
+    <div id="reminders-list">
+      <p style="font-size:13px;color:var(--muted);text-align:center;padding:1rem">No active reminders. Analyze a prescription to add some!</p>
+    </div>
+  </div>
+</div>
+
 <!-- LOADING STATE -->
 <div id="loading-section" class="hidden loading-wrap">
   <div class="pulse-ring"></div>
@@ -365,10 +389,75 @@ Example Prescription:
       loginBtn.classList.add('hidden');
       userName.innerText = `Hello, ${userData.name}`;
       hideAuthModal();
+      loadReminders();
+      document.getElementById('reminders-section').classList.remove('hidden');
     } else {
       profile.classList.add('hidden');
       loginBtn.classList.remove('hidden');
+      document.getElementById('reminders-section').classList.add('hidden');
       showAuthModal();
+    }
+  }
+
+  async function loadReminders() {
+    try {
+      const res = await fetch(`${API_BASE}/api/reminders`, {
+        headers: { 'Authorization': `Bearer ${userToken}` }
+      });
+      const data = await res.json();
+      if (!res.ok) return;
+
+      const list = document.getElementById('reminders-list');
+      if (data.reminders.length === 0) {
+        list.innerHTML = '<p style="font-size:13px;color:var(--muted);text-align:center;padding:1rem">No active reminders. Analyze a prescription to add some!</p>';
+        return;
+      }
+
+      list.innerHTML = data.reminders.map(r => `
+        <div class="reminder-item">
+          <div class="reminder-info">
+            <h4>${esc(r.medicine_name)}</h4>
+            <p>${esc(r.dosage)} • ${esc(r.note)}</p>
+          </div>
+          <button class="btn-delete" onclick="deleteReminder(${r.id})">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </button>
+        </div>
+      `).join('');
+    } catch (e) {
+      console.error('Load reminders error:', e);
+    }
+  }
+
+  async function addReminder(name, dosage, note) {
+    try {
+      const res = await fetch(`${API_BASE}/api/reminders`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}` 
+        },
+        body: JSON.stringify({ medicine_name: name, dosage, note })
+      });
+      if (res.ok) {
+        alert('Reminder added for ' + name);
+        loadReminders();
+      }
+    } catch (e) {
+      alert('Failed to add reminder');
+    }
+  }
+
+  async function deleteReminder(id) {
+    if (!confirm('Remove this reminder?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/reminders/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${userToken}` }
+      });
+      if (res.ok) loadReminders();
+    } catch (e) {
+      alert('Failed to delete reminder');
     }
   }
 
@@ -560,6 +649,7 @@ Example Prescription:
           <div class="s-val">${esc(m.value)}</div>
           <div class="s-note">${esc(m.note)}</div>
           <span class="badge ${m.status || 'review'}">${cap(m.status || 'review')}</span>
+          ${r.title.toLowerCase().includes('prescription') ? `<button class="btn-add-reminder" onclick="addReminder('${esc(m.name)}', '${esc(m.value)}', '${esc(m.note)}')">+ Add Reminder</button>` : ''}
         </div>`
       ).join('') + '</div>';
     }

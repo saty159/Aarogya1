@@ -4,7 +4,6 @@ const dotenv = require('dotenv');
 const axios = require('axios');
 const multer = require('multer');
 const rateLimit = require('express-rate-limit');
-const fs = require('fs');
 const path = require('path');
 const pdfParse = require('pdf-parse');
 const bcrypt = require('bcryptjs');
@@ -28,6 +27,36 @@ const pool = new Pool({
     rejectUnauthorized: false
   }
 });
+
+// Initialize Database Tables
+async function initDB() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        name TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS reminders (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        medicine_name TEXT NOT NULL,
+        dosage TEXT,
+        note TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('✅ Database tables initialized');
+  } catch (err) {
+    console.error('❌ Database initialization failed:', err);
+  }
+}
+initDB();
 
 // Auth Middleware
 function authenticateToken(req, res, next) {
@@ -95,6 +124,47 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Reminder Endpoints
+app.post('/api/reminders', authenticateToken, async (req, res) => {
+  try {
+    const { medicine_name, dosage, note } = req.body;
+    if (!medicine_name) return res.status(400).json({ error: 'Medicine name is required' });
+
+    const result = await pool.query(
+      'INSERT INTO reminders (user_id, medicine_name, dosage, note) VALUES ($1, $2, $3, $4) RETURNING *',
+      [req.user.id, medicine_name, dosage, note]
+    );
+    res.status(201).json({ success: true, reminder: result.rows[0] });
+  } catch (error) {
+    console.error('Failed to create reminder:', error);
+    res.status(500).json({ error: 'Failed to save reminder' });
+  }
+});
+
+app.get('/api/reminders', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM reminders WHERE user_id = $1 ORDER BY created_at DESC',
+      [req.user.id]
+    );
+    res.json({ success: true, reminders: result.rows });
+  } catch (error) {
+    console.error('Failed to fetch reminders:', error);
+    res.status(500).json({ error: 'Failed to load reminders' });
+  }
+});
+
+app.delete('/api/reminders/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('DELETE FROM reminders WHERE id = $1 AND user_id = $2', [id, req.user.id]);
+    res.json({ success: true, message: 'Reminder deleted' });
+  } catch (error) {
+    console.error('Failed to delete reminder:', error);
+    res.status(500).json({ error: 'Failed to delete reminder' });
+  }
+});
+
 // Simple In-Memory Cache
 const analysisCache = new Map();
 
@@ -136,8 +206,6 @@ async function callGeminiWithRetry(url, data, headers, retries = 3, delay = 2000
 }
 
 app.use('/api/', apiLimiter);
-
-// Middleware IP tracking removed for Vercel Serverless compatibility
 
 // Configure multer for file uploads
 const storage = multer.memoryStorage();
