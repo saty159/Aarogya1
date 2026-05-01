@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Aarogya — AI Medical Report Explainer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -313,7 +314,10 @@ Example Prescription:
 <div id="results-section" class="results-wrap hidden">
   <div class="results-header">
     <h2>Your Report Explained</h2>
-    <button class="back-btn" onclick="resetUI()">← Analyze another report</button>
+    <div style="display:flex;gap:10px">
+      <button class="back-btn" id="download-btn" style="background:var(--blue);color:white;border-color:var(--blue)" onclick="downloadPDF()">Download PDF ↓</button>
+      <button class="back-btn" onclick="resetUI()">← Analyze another</button>
+    </div>
   </div>
   <div id="results-content"></div>
 </div>
@@ -595,6 +599,34 @@ Example Prescription:
       </div>`;
 
     sec.scrollIntoView({ behavior: 'smooth' });
+  }
+
+
+
+  async function downloadPDF() {
+    const element = document.getElementById('results-content');
+    const downloadBtn = document.getElementById('download-btn');
+    
+    // Temporarily hide the button or handle styling
+    const opt = {
+      margin:       10,
+      filename:     'Aarogya-Analysis.pdf',
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    try {
+      downloadBtn.innerText = 'Generating...';
+      downloadBtn.disabled = true;
+      await html2pdf().set(opt).from(element).save();
+    } catch (e) {
+      console.error('PDF Error:', e);
+      alert('Could not generate PDF. Please try again.');
+    } finally {
+      downloadBtn.innerText = 'Download PDF ↓';
+      downloadBtn.disabled = false;
+    }
   }
 
   function resetUI() {
