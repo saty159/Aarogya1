@@ -436,14 +436,41 @@ app.post('/api/analyze-file', authenticateToken, upload.single('file'), async (r
 
 /**
  * GET /api/health
- * Health check endpoint
+ * Health check endpoint with API diagnostics
  */
-app.get('/api/health', (req, res) => {
-  res.json({
+app.get('/api/health', async (req, res) => {
+  const diagnostics = {
     status: 'ok',
     timestamp: new Date().toISOString(),
-    apiConfigured: !!API_KEY
-  });
+    gemini: { configured: !!API_KEY, status: 'unknown' },
+    groq: { configured: !!GROQ_API_KEY, status: 'unknown' }
+  };
+
+  // Test Gemini
+  if (API_KEY) {
+    try {
+      await axios.get(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest?key=${API_KEY}`);
+      diagnostics.gemini.status = 'connected';
+    } catch (e) {
+      diagnostics.gemini.status = 'error';
+      diagnostics.gemini.error = e.message;
+    }
+  }
+
+  // Test Groq
+  if (GROQ_API_KEY) {
+    try {
+      await axios.get('https://api.groq.com/openai/v1/models', {
+        headers: { 'Authorization': `Bearer ${GROQ_API_KEY}` }
+      });
+      diagnostics.groq.status = 'connected';
+    } catch (e) {
+      diagnostics.groq.status = 'error';
+      diagnostics.groq.error = e.message;
+    }
+  }
+
+  res.json(diagnostics);
 });
 
 /**
