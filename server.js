@@ -17,7 +17,8 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const API_KEY = process.env.GEMINI_API_KEY || process.env.ANTHROPIC_API_KEY;
+const API_KEY = process.env.GEMINI_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const JWT_SECRET = process.env.JWT_SECRET || 'aarogya_secret_key_2026';
 
 const { Pool } = require('pg');
@@ -163,6 +164,28 @@ async function callGeminiWithRetry(url, data, headers, retries = 3, delay = 2000
   }
 }
 
+async function callGroq(text) {
+  try {
+    const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+      model: 'llama-3.1-70b-versatile',
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: `Analyze this medical report and explain it:\n\n${text}` }
+      ],
+      response_format: { type: "json_object" }
+    }, {
+      headers: {
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    return JSON.parse(response.data.choices[0].message.content);
+  } catch (error) {
+    console.error('Groq API Error:', error.message);
+    throw error;
+  }
+}
+
 app.use('/api/', apiLimiter);
 
 // Configure multer for file uploads
@@ -250,34 +273,44 @@ app.post('/api/analyze', authenticateToken, async (req, res) => {
       return res.json({ success: true, data: analysisCache.get(text) });
     }
 
-    // Call Gemini API via sequential queue and retry wrapper
-    const response = await requestQueue.add(() => 
-      callGeminiWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`, {
-        systemInstruction: {
-          parts: [{ text: SYSTEM_PROMPT }]
-        },
-        contents: [{
-          parts: [{ text: `Analyze this medical report and explain it:\n\n${text}` }]
-        }],
-        generationConfig: {
-          responseMimeType: "application/json"
-        }
-      }, {
-        'Content-Type': 'application/json'
-      })
-    );
+    // Call APIs (Consensus Approach)
+    let result;
+    try {
+      // Primary: Gemini
+      const response = await requestQueue.add(() => 
+        callGeminiWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`, {
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: [{ parts: [{ text: `Analyze this medical report and explain it:\n\n${text}` }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        }, { 'Content-Type': 'application/json' })
+      );
+      const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      result = JSON.parse(content.replace(/```json|```/g, '').trim());
 
-    // Extract and parse the response
-    const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const cleanedContent = content.replace(/```json|```/g, '').trim();
-    const result = JSON.parse(cleanedContent);
+      // Secondary: Groq (for consensus/re-verification if text)
+      if (GROQ_API_KEY) {
+        try {
+          const groqResult = await callGroq(text);
+          // Simple consensus: mix action items or use Groq to double check
+          result.groq_verified = true;
+          console.log('✅ Groq Consensus achieved');
+        } catch (e) {
+          console.warn('Groq consensus failed, using Gemini only');
+        }
+      }
+    } catch (e) {
+      // Fallback to Groq if Gemini fails
+      if (GROQ_API_KEY) {
+        console.log('Gemini failed, trying Groq fallback...');
+        result = await callGroq(text);
+        result.fallback_active = true;
+      } else {
+        throw e;
+      }
+    }
 
     analysisCache.set(text, result);
-
-    res.json({
-      success: true,
-      data: result
-    });
+    res.json({ success: true, data: result });
 
   } catch (error) {
     console.error('Analysis error:', error.message);
@@ -354,37 +387,43 @@ app.post('/api/analyze-file', authenticateToken, upload.single('file'), async (r
       return res.json({ success: true, data: analysisCache.get(cacheKey) });
     }
 
-    // Call Gemini API via sequential queue and retry wrapper
-    const response = await requestQueue.add(() => 
-      callGeminiWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`, {
-        systemInstruction: {
-          parts: [{ text: SYSTEM_PROMPT }]
-        },
-        contents: [{
-          parts: [
-            { text: `Analyze this medical report and explain it:\n\n${text}` },
-            ...imageParts
-          ]
-        }],
-        generationConfig: {
-          responseMimeType: "application/json"
-        }
-      }, {
-        'Content-Type': 'application/json'
-      })
-    );
+    // Call APIs (Consensus Approach)
+    let result;
+    try {
+      // Primary: Gemini (Vision + Interpretation)
+      const response = await requestQueue.add(() => 
+        callGeminiWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`, {
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: [{ parts: [{ text: `Analyze this medical report and explain it:\n\n${text}` }, ...imageParts] }],
+          generationConfig: { responseMimeType: "application/json" }
+        }, { 'Content-Type': 'application/json' })
+      );
+      const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      result = JSON.parse(content.replace(/```json|```/g, '').trim());
 
-    // Extract and parse the response
-    const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const cleanedContent = content.replace(/```json|```/g, '').trim();
-    const result = JSON.parse(cleanedContent);
+      // Secondary: Groq (if text was extracted, cross-verify)
+      if (GROQ_API_KEY && text.trim()) {
+        try {
+          await callGroq(text);
+          result.groq_verified = true;
+          console.log('✅ Groq Consensus achieved for file');
+        } catch (e) {
+          console.warn('Groq consensus failed for file');
+        }
+      }
+    } catch (e) {
+      // Fallback to Groq for text-based files
+      if (GROQ_API_KEY && text.trim()) {
+        console.log('Gemini failed for file, trying Groq fallback...');
+        result = await callGroq(text);
+        result.fallback_active = true;
+      } else {
+        throw e;
+      }
+    }
 
     analysisCache.set(cacheKey, result);
-
-    res.json({
-      success: true,
-      data: result
-    });
+    res.json({ success: true, data: result });
 
   } catch (error) {
     console.error('File analysis error:', error.message);

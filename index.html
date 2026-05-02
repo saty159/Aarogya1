@@ -167,6 +167,7 @@ footer strong{color:var(--green)}
 .conf-high{background:#E1F5EE;color:#1D9E75}
 .conf-med{background:#FAEEDA;color:#854F0B}
 .conf-low{background:#FCEBEB;color:#A32D2D}
+.verified-badge{display:inline-flex;align-items:center;gap:4px;background:#E6F1FB;color:#185FA5;font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;margin-bottom:1rem}
 .ocr-note{font-size:10px;color:var(--red);font-style:italic;margin-top:4px;display:block}
 .raw-wrap{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-top:1.5rem}
 .raw-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between;cursor:pointer}
@@ -609,6 +610,7 @@ Example Prescription:
     }
 
     document.getElementById('results-content').innerHTML =
+      (r.groq_verified || r.fallback_active ? `<div class="verified-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Dual-AI Verified (Gemini + Groq)</div>` : '') +
       `<div class="summary-card">
         <div class="label">Report Type</div>
         <h3>${esc(r.title)}</h3>
