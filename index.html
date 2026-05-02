@@ -173,28 +173,9 @@ footer strong{color:var(--primary)}
 .raw-content{font-size:12px;color:var(--muted);white-space:pre-wrap;max-height:150px;overflow-y:auto;display:none}
 .raw-content.show{display:block}
 
-/* CHAT WIDGET */
-#chat-widget{position:fixed;bottom:24px;right:24px;z-index:1000;display:flex;flex-direction:column;align-items:flex-end}
-#chat-btn{width:56px;height:56px;border-radius:50%;background:var(--primary);color:#fff;border:none;box-shadow:0 8px 24px rgba(37,99,235,0.4);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.3s cubic-bezier(0.175,0.885,0.32,1.275)}
-#chat-btn:hover{transform:scale(1.08);background:var(--primary-dark)}
-#chat-btn svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2.2}
-#chat-window{width:360px;height:500px;background:var(--surface);border-radius:var(--radius-lg);box-shadow:0 12px 48px rgba(0,0,0,0.15);margin-bottom:16px;display:none;flex-direction:column;overflow:hidden;border:1px solid var(--border)}
-#chat-window.open{display:flex;animation:slideUp 0.3s ease}
-@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-.chat-header{background:var(--primary);color:#fff;padding:16px;display:flex;justify-content:space-between;align-items:center}
-.chat-header h4{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
-.chat-header .status-dot{width:8px;height:8px;background:#4ADE80;border-radius:50%;box-shadow:0 0 8px #4ADE80}
-.chat-close{background:none;border:none;color:#fff;cursor:pointer;opacity:0.7;padding:4px}
-.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;background:#F8FAFC}
-.msg{max-width:85%;padding:10px 14px;border-radius:18px;font-size:13px;line-height:1.5}
-.msg.ai{background:#fff;color:var(--text);align-self:flex-start;border-bottom-left-radius:4px;box-shadow:0 2px 5px rgba(0,0,0,0.05);border:1px solid var(--border)}
-.msg.user{background:var(--primary);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
-.chat-input-area{padding:12px;background:var(--surface);border-top:1px solid var(--border);display:flex;gap:8px}
-#chat-input{flex:1;border:1px solid var(--border);border-radius:20px;padding:8px 16px;font-size:13px;outline:none;transition:border-color 0.2s}
-#chat-input:focus{border-color:var(--primary)}
-#chat-send{background:var(--primary);color:#fff;border:none;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s}
-#chat-send:hover{background:var(--primary-dark);transform:scale(1.05)}
-#chat-send svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.5}
+.raw-content.show{display:block}
+#raw-text{font-size:12px;color:var(--muted);white-space:pre-wrap;max-height:150px;overflow-y:auto;display:none}
+.raw-content.show{display:block}
 </style>
 </head>
 <body>
@@ -716,105 +697,10 @@ Example Prescription:
         r.readAsText(f);
       } else if (f.type === 'application/pdf' || f.type.startsWith('image/')) {
         uploadAndAnalyzeFile(f);
-      } else {
-        alert('Please upload PDF, JPG, PNG or TXT files.');
       }
     }
     e.target.value = '';
   });
-
-  // Chat Logic
-  let chatHistory = [];
-
-  function toggleChat() {
-    const win = document.getElementById('chat-window');
-    win.classList.toggle('open');
-    if (win.classList.contains('open')) {
-      document.getElementById('chat-input').focus();
-      if (chatHistory.length === 0) {
-        addMessage('ai', 'Hello! I am your Aarogya Medical Assistant. How can I help you with your health or reports today?');
-      }
-    }
-  }
-
-  async function sendChatMessage() {
-    const input = document.getElementById('chat-input');
-    const msg = input.value.trim();
-    if (!msg) return;
-
-    input.value = '';
-    addMessage('user', msg);
-    
-    const loadingId = 'ai-loading-' + Date.now();
-    const chatMsgs = document.getElementById('chat-messages');
-    const loadingDiv = document.createElement('div');
-    loadingDiv.className = 'msg ai';
-    loadingDiv.id = loadingId;
-    loadingDiv.innerText = 'Thinking...';
-    chatMsgs.appendChild(loadingDiv);
-    chatMsgs.scrollTop = chatMsgs.scrollHeight;
-
-    try {
-      const res = await fetch(`${API_BASE}/api/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userToken}`
-        },
-        body: JSON.stringify({
-          message: msg,
-          history: chatHistory,
-          context: currentReportContext
-        })
-      });
-
-      const data = await res.json();
-      document.getElementById(loadingId).remove();
-
-      if (data.reply) {
-        addMessage('ai', data.reply);
-      } else {
-        addMessage('ai', 'Sorry, I encountered an error. Please try again.');
-      }
-    } catch (e) {
-      document.getElementById(loadingId).remove();
-      addMessage('ai', 'Error connecting to the assistant. Please check your connection.');
-    }
-  }
-
-  function addMessage(role, text) {
-    const chatMsgs = document.getElementById('chat-messages');
-    const div = document.createElement('div');
-    div.className = `msg ${role}`;
-    div.innerText = text;
-    chatMsgs.appendChild(div);
-    chatMsgs.scrollTop = chatMsgs.scrollHeight;
-    chatHistory.push({ role: role === 'ai' ? 'assistant' : 'user', content: text });
-  }
-
-  document.getElementById('chat-input').addEventListener('keypress', e => {
-    if (e.key === 'Enter') sendChatMessage();
-  });
 </script>
-
-<div id="chat-widget">
-  <div id="chat-window">
-    <div class="chat-header">
-      <h4><span class="status-dot"></span> Aarogya Medical Assistant</h4>
-      <button class="chat-close" onclick="toggleChat()">×</button>
-    </div>
-    <div id="chat-messages" class="chat-messages"></div>
-    <div class="chat-input-area">
-      <input type="text" id="chat-input" placeholder="Ask about your health or report...">
-      <button id="chat-send" onclick="sendChatMessage()">
-        <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z"/></svg>
-      </button>
-    </div>
-  </div>
-  <button id="chat-btn" onclick="toggleChat()">
-    <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-  </button>
-</div>
-
 </body>
 </html>

@@ -246,14 +246,6 @@ const SYSTEM_PROMPT = `You are Aarogya, a high-precision AI medical assistant. Y
 - Never skip a medicine name; if illegible, mark as "Illegible [Confidence Score]".
 - Use simple language for explanations.`;
 
-const CHAT_SYSTEM_PROMPT = `You are Aarogya Chat Assistant, a highly specialized medical assistant. 
-RULES:
-1. ONLY answer questions related to health, medical reports, medicines, and wellness.
-2. If a user asks about non-medical topics (e.g., politics, movies, coding), politely decline: "I am Aarogya AI, specialized only in medical assistance. I cannot help with that."
-3. Be reassuring but always include a disclaimer that you are an AI, not a doctor.
-4. Keep answers concise and helpful.
-5. If the user mentions their report, refer to the information provided in their current context.`;
-
 /**
  * POST /api/analyze
  * Analyzes medical report text
@@ -481,46 +473,7 @@ app.get('/api/health', async (req, res) => {
   res.json(diagnostics);
 });
 
-/**
- * POST /api/chat
- * Medical assistant chatbot endpoint
- */
-app.post('/api/chat', authenticateToken, async (req, res) => {
-  try {
-    const { message, history, context } = req.body;
-
-    if (!GROQ_API_KEY) {
-      return res.status(500).json({ error: 'Chat system not configured on server.' });
-    }
-
-    const messages = [
-      { role: 'system', content: CHAT_SYSTEM_PROMPT },
-      ...(context ? [{ role: 'system', content: `Current Patient Context: ${JSON.stringify(context)}` }] : []),
-      ...history.slice(-6), // Keep last 6 messages for context
-      { role: 'user', content: message }
-    ];
-
-    const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-      model: 'llama-3.1-70b-versatile',
-      messages: messages,
-      temperature: 0.7,
-      max_tokens: 500
-    }, {
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    res.json({
-      success: true,
-      reply: response.data.choices[0].message.content
-    });
-
-  } catch (error) {
-    console.error('Chat Error:', error.message);
-    res.status(500).json({ error: 'Failed to connect to chat assistant.' });
-  }
+  res.json(diagnostics);
 });
 
 /**
