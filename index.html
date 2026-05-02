@@ -162,6 +162,17 @@ footer strong{color:var(--green)}
 #logout-btn{background:transparent;border:1px solid var(--border);padding:4px 12px;border-radius:var(--radius-sm);font-size:11px;color:var(--muted);cursor:pointer}
 #logout-btn:hover{border-color:var(--red);color:var(--red)}
 
+/* CONFIDENCE BADGES */
+.conf-badge{font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:5px}
+.conf-high{background:#E1F5EE;color:#1D9E75}
+.conf-med{background:#FAEEDA;color:#854F0B}
+.conf-low{background:#FCEBEB;color:#A32D2D}
+.ocr-note{font-size:10px;color:var(--red);font-style:italic;margin-top:4px;display:block}
+.raw-wrap{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-top:1.5rem}
+.raw-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between;cursor:pointer}
+.raw-content{font-size:12px;color:var(--muted);white-space:pre-wrap;max-height:150px;overflow-y:auto;display:none}
+.raw-content.show{display:block}
+
 </style>
 </head>
 <body>
@@ -561,14 +572,19 @@ Example Prescription:
     // Metrics
     let metricsHTML = '';
     if (r.metrics && r.metrics.length) {
-      metricsHTML = '<div class="status-grid">' + r.metrics.map((m, i) =>
-        `<div class="status-card">
-          <div class="s-label">${esc(m.name)}</div>
+      metricsHTML = '<div class="status-grid">' + r.metrics.map((m, i) => {
+        const confClass = m.confidence > 90 ? 'conf-high' : (m.confidence > 75 ? 'conf-med' : 'conf-low');
+        return `<div class="status-card">
+          <div class="s-label">
+            ${esc(m.name)} 
+            <span class="conf-badge ${confClass}" title="AI Confidence Score">${m.confidence || 0}%</span>
+          </div>
           <div class="s-val">${esc(m.value)}</div>
           <div class="s-note">${esc(m.note)}</div>
           <span class="badge ${m.status || 'review'}">${cap(m.status || 'review')}</span>
-        </div>`
-      ).join('') + '</div>';
+          ${m.ocr_note ? `<span class="ocr-note">Note: ${esc(m.ocr_note)}</span>` : ''}
+        </div>`;
+      }).join('') + '</div>';
     }
 
     // Findings
@@ -600,6 +616,13 @@ Example Prescription:
         <span class="status-pill">${esc(r.overall_status)}</span>
       </div>` +
       metricsHTML + findingsHTML + actionsHTML +
+      `<div class="raw-wrap">
+        <div class="raw-title" onclick="document.getElementById('raw-text').classList.toggle('show')">
+          <span>View Raw Extracted Text</span>
+          <span>▼</span>
+        </div>
+        <div id="raw-text" class="raw-content">${esc(r.raw_extraction || 'No raw text available')}</div>
+      </div>` +
       `<div class="disclaimer">
         <svg viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
         <p><strong>Important:</strong> Aarogya's explanations are for educational purposes only and do not replace professional medical advice. Always consult your doctor or qualified healthcare provider before making any health decisions.</p>
