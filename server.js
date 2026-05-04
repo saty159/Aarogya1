@@ -240,6 +240,10 @@ const SYSTEM_PROMPT = `You are Aarogya, a high-precision AI medical assistant. Y
   "action_items": ["Step 1", "Step 2"]
 }
 
+### STRICT SCOPE RULES (MANDATORY):
+1. **Medical Only**: You MUST ONLY analyze medical reports, blood tests, lab results, or prescriptions.
+2. **Rejection**: If the input is NOT a medical document (e.g., it is a general question, a non-medical image, a recipe, a book page, etc.), you MUST return a JSON object with an 'error' field: {"error": "Invalid Document. Aarogya only interprets medical reports and prescriptions."}. Do not attempt to interpret non-medical text.
+
 ### RULES:
 - Provide a 'confidence' score (0-100) for every metric and finding based on how clear the handwriting/text was.
 - If confidence is below 70, explain why in 'ocr_note'.
@@ -307,6 +311,10 @@ app.post('/api/analyze', authenticateToken, async (req, res) => {
       } else {
         throw e;
       }
+    }
+
+    if (result.error) {
+      return res.status(400).json({ error: result.error });
     }
 
     analysisCache.set(text, result);
@@ -420,6 +428,10 @@ app.post('/api/analyze-file', authenticateToken, upload.single('file'), async (r
       } else {
         throw e;
       }
+    }
+
+    if (result.error) {
+      return res.status(400).json({ error: result.error });
     }
 
     analysisCache.set(cacheKey, result);
