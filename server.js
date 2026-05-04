@@ -32,12 +32,8 @@ const pool = new Pool({
   }
 });
 
-// Initialize Database Tables
 async function initDB() {
   try {
-    // Migration: Ensure columns exist for existing tables (Run first to avoid issues)
-
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -47,11 +43,9 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    
-
-    console.log('✅ Database tables and migrations initialized');
+    console.log('✅ Database initialized');
   } catch (err) {
-    console.error('❌ Database initialization failed:', err);
+    console.error('❌ DB Error:', err);
   }
 }
 initDB();
@@ -124,19 +118,10 @@ app.post('/api/auth/login', async (req, res) => {
 
 
 
-// Simple In-Memory Cache
 const analysisCache = new Map();
-
-// Sequential Queue implementation
 class AsyncQueue {
-  constructor() {
-    this.queue = Promise.resolve();
-  }
-  add(operation) {
-    return new Promise((resolve, reject) => {
-      this.queue = this.queue.then(() => operation().then(resolve).catch(reject));
-    });
-  }
+  constructor() { this.queue = Promise.resolve(); }
+  add(op) { return new Promise((res, rej) => this.queue = this.queue.then(() => op().then(res).catch(rej))); }
 }
 const requestQueue = new AsyncQueue();
 
@@ -439,42 +424,9 @@ app.post('/api/analyze-file', authenticateToken, upload.single('file'), async (r
  * Health check endpoint with API diagnostics
  */
 app.get('/api/health', async (req, res) => {
-  const diagnostics = {
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    gemini: { configured: !!API_KEY, status: 'unknown' },
-    groq: { configured: !!GROQ_API_KEY, status: 'unknown' }
-  };
-
-  // Test Gemini
-  if (API_KEY) {
-    try {
-      await axios.get(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest?key=${API_KEY}`);
-      diagnostics.gemini.status = 'connected';
-    } catch (e) {
-      diagnostics.gemini.status = 'error';
-      diagnostics.gemini.error = e.message;
-    }
-  }
-
-  // Test Groq
-  if (GROQ_API_KEY) {
-    try {
-      await axios.get('https://api.groq.com/openai/v1/models', {
-        headers: { 'Authorization': `Bearer ${GROQ_API_KEY}` }
-      });
-      diagnostics.groq.status = 'connected';
-    } catch (e) {
-      diagnostics.groq.status = 'error';
-      diagnostics.groq.error = e.message;
-    }
-  }
-
-  res.json(diagnostics);
+  res.json({ status: 'ok', time: new Date(), gemini: !!API_KEY, groq: !!GROQ_API_KEY });
 });
 
-  res.json(diagnostics);
-});
 
 /**
  * GET /
