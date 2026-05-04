@@ -194,11 +194,11 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
-    const allowedMimes = ['text/plain', 'application/pdf', 'image/jpeg', 'image/png'];
+    const allowedMimes = ['text/plain', 'application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
     if (allowedMimes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only TXT, PDF, JPG, PNG allowed.'));
+      cb(new Error('Invalid file type. Only TXT, PDF, JPG, PNG, WEBP allowed.'));
     }
   },
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
