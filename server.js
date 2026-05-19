@@ -8,6 +8,8 @@ const path = require('path');
 const pdfParse = require('pdf-parse');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const crypto = require('crypto');
 
 
 // Load environment variables
@@ -32,6 +34,97 @@ const pool = new Pool({
   }
 });
 
+const USERS_FILE = process.env.VERCEL
+  ? '/tmp/users-db.json'
+  : path.join(__dirname, 'users-db.json');
+
+let useLocalDb = false;
+
+// Helper to read local users
+function readLocalUsers() {
+  try {
+    if (!fs.existsSync(USERS_FILE)) {
+      return [];
+    }
+    const data = fs.readFileSync(USERS_FILE, 'utf8');
+    return JSON.parse(data || '[]');
+  } catch (err) {
+    console.error('❌ Error reading local users file:', err.message);
+    return [];
+  }
+}
+
+// Helper to write local users
+function writeLocalUsers(users) {
+  try {
+    const dir = path.dirname(USERS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+  } catch (err) {
+    console.error('❌ Error writing local users file:', err.message);
+  }
+}
+
+// User repository wrapper
+const userRepo = {
+  async findByEmail(email) {
+    if (!useLocalDb) {
+      try {
+        const fetchUser = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        return fetchUser.rows[0] || null;
+      } catch (err) {
+        console.error('❌ Database error during findByEmail, switching to local DB:', err.message);
+        useLocalDb = true;
+      }
+    }
+    
+    // Fallback to local DB
+    const users = readLocalUsers();
+    return users.find(u => u.email.toLowerCase() === email.toLowerCase()) || null;
+  },
+
+  async create(email, hashedPassword, name) {
+    if (!useLocalDb) {
+      try {
+        const insertUser = await pool.query(
+          'INSERT INTO users (email, password, name) VALUES ($1, $2, $3) RETURNING id, email, name',
+          [email, hashedPassword, name || email]
+        );
+        return insertUser.rows[0];
+      } catch (err) {
+        console.error('❌ Database error during createUser, switching to local DB:', err.message);
+        useLocalDb = true;
+      }
+    }
+
+    // Fallback to local DB
+    const users = readLocalUsers();
+    // Double check email uniqueness locally
+    if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+      throw new Error('User already exists in local database');
+    }
+
+    const newUser = {
+      id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36),
+      email,
+      password: hashedPassword,
+      name: name || email,
+      created_at: new Date().toISOString()
+    };
+
+    users.push(newUser);
+    writeLocalUsers(users);
+
+    return {
+      id: newUser.id,
+      email: newUser.email,
+      name: newUser.name
+    };
+  }
+};
+
 // Initialize Database Tables
 async function initDB() {
   try {
@@ -51,7 +144,16 @@ async function initDB() {
 
     console.log('✅ Database tables and migrations initialized');
   } catch (err) {
-    console.error('❌ Database initialization failed:', err);
+    console.error('❌ Database initialization failed:', err.message);
+    console.warn('⚠️ Falling back to local file-based database (users-db.json)');
+    useLocalDb = true;
+    try {
+      if (!fs.existsSync(USERS_FILE)) {
+        writeLocalUsers([]);
+      }
+    } catch (fsErr) {
+      console.error('❌ Failed to initialize local database file:', fsErr.message);
+    }
   }
 }
 initDB();
@@ -84,32 +186,30 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
     
-    const checkUser = await pool.query('SELECT email FROM users WHERE email = $1', [email]);
-    if (checkUser.rows.length > 0) {
+    const checkUser = await userRepo.findByEmail(email);
+    if (checkUser) {
       return res.status(400).json({ error: 'User already exists' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const insertUser = await pool.query(
-      'INSERT INTO users (email, password, name) VALUES ($1, $2, $3) RETURNING id, email, name',
-      [email, hashedPassword, name || email]
-    );
-    const newUser = insertUser.rows[0];
+    const newUser = await userRepo.create(email, hashedPassword, name);
 
     const token = jwt.sign({ id: newUser.id, email: newUser.email }, JWT_SECRET, { expiresIn: '24h' });
     res.status(201).json({ success: true, token, user: { email: newUser.email, name: newUser.name } });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: 'Registration failed' });
+    res.status(500).json({ error: error.message || 'Registration failed' });
   }
 });
 
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const fetchUser = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    const user = fetchUser.rows[0];
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
 
+    const user = await userRepo.findByEmail(email);
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -118,7 +218,7 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ success: true, token, user: { email: user.email, name: user.name } });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: error.message || 'Login failed' });
   }
 });
 
