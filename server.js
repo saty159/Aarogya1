@@ -224,6 +224,39 @@ app.post('/api/auth/login', async (req, res) => {
 
 
 
+// Robust LLM JSON Parser
+function parseLLMJSON(text) {
+  if (!text || typeof text !== 'string') {
+    throw new SyntaxError('Empty or invalid response');
+  }
+  
+  const cleanedText = text.trim();
+  
+  // Try direct parse first
+  try {
+    return JSON.parse(cleanedText);
+  } catch (e) {
+    // If direct parse fails, try extracting between first { and last }
+    const start = cleanedText.indexOf('{');
+    const end = cleanedText.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && start < end) {
+      const jsonStr = cleanedText.substring(start, end + 1);
+      try {
+        return JSON.parse(jsonStr);
+      } catch (innerError) {
+        // Try removing markdown fences if they are inside the extracted string
+        try {
+          const cleaned = jsonStr.replace(/```json|```/g, '').trim();
+          return JSON.parse(cleaned);
+        } catch (innerError2) {
+          throw new SyntaxError('Failed to parse JSON content from response: ' + innerError2.message);
+        }
+      }
+    }
+    throw e;
+  }
+}
+
 // Simple In-Memory Cache
 const analysisCache = new Map();
 
@@ -279,7 +312,7 @@ async function callGroq(text) {
         'Content-Type': 'application/json'
       }
     });
-    return JSON.parse(response.data.choices[0].message.content);
+    return parseLLMJSON(response.data.choices[0].message.content);
   } catch (error) {
     console.error('Groq API Error:', error.message);
     throw error;
@@ -389,7 +422,7 @@ app.post('/api/analyze', authenticateToken, async (req, res) => {
         }, { 'Content-Type': 'application/json' })
       );
       const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      result = JSON.parse(content.replace(/```json|```/g, '').trim());
+      result = parseLLMJSON(content);
 
       // Secondary: Groq (for consensus/re-verification if text)
       if (GROQ_API_KEY) {
@@ -507,7 +540,7 @@ app.post('/api/analyze-file', authenticateToken, upload.single('file'), async (r
         }, { 'Content-Type': 'application/json' })
       );
       const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      result = JSON.parse(content.replace(/```json|```/g, '').trim());
+      result = parseLLMJSON(content);
 
       // Secondary: Groq (if text was extracted, cross-verify)
       if (GROQ_API_KEY && text.trim()) {
