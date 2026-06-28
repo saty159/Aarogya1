@@ -38,6 +38,10 @@ const USERS_FILE = process.env.VERCEL
   ? '/tmp/users-db.json'
   : path.join(__dirname, 'users-db.json');
 
+const REPORTS_FILE = process.env.VERCEL
+  ? '/tmp/reports-db.json'
+  : path.join(__dirname, 'reports-db.json');
+
 let useLocalDb = false;
 
 // Helper to read local users
@@ -64,6 +68,33 @@ function writeLocalUsers(users) {
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
   } catch (err) {
     console.error('❌ Error writing local users file:', err.message);
+  }
+}
+
+// Helper to read local reports
+function readLocalReports() {
+  try {
+    if (!fs.existsSync(REPORTS_FILE)) {
+      return [];
+    }
+    const data = fs.readFileSync(REPORTS_FILE, 'utf8');
+    return JSON.parse(data || '[]');
+  } catch (err) {
+    console.error('❌ Error reading local reports file:', err.message);
+    return [];
+  }
+}
+
+// Helper to write local reports
+function writeLocalReports(reports) {
+  try {
+    const dir = path.dirname(REPORTS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(REPORTS_FILE, JSON.stringify(reports, null, 2), 'utf8');
+  } catch (err) {
+    console.error('❌ Error writing local reports file:', err.message);
   }
 }
 
@@ -125,12 +156,113 @@ const userRepo = {
   }
 };
 
+// Report repository wrapper
+const reportRepo = {
+  async create(userId, title, overallSummary, overallStatus, data) {
+    if (!useLocalDb) {
+      try {
+        const insertReport = await pool.query(
+          `INSERT INTO reports (user_id, title, overall_summary, overall_status, data) 
+           VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+          [userId, title, overallSummary, overallStatus, JSON.stringify(data)]
+        );
+        return insertReport.rows[0];
+      } catch (err) {
+        console.error('❌ Database error during createReport, falling back to local DB:', err.message);
+      }
+    }
+
+    // Fallback to local DB
+    const reports = readLocalReports();
+    const newReport = {
+      id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36),
+      user_id: userId,
+      title,
+      overall_summary: overallSummary,
+      overall_status: overallStatus,
+      data,
+      created_at: new Date().toISOString()
+    };
+    reports.push(newReport);
+    writeLocalReports(reports);
+    return newReport;
+  },
+
+  async findByUserId(userId) {
+    if (!useLocalDb) {
+      try {
+        const fetchReports = await pool.query(
+          'SELECT id, user_id, title, overall_summary, overall_status, created_at FROM reports WHERE user_id = $1 ORDER BY created_at DESC',
+          [userId]
+        );
+        return fetchReports.rows;
+      } catch (err) {
+        console.error('❌ Database error during findByUserId, falling back to local DB:', err.message);
+      }
+    }
+
+    // Fallback to local DB
+    const reports = readLocalReports();
+    return reports
+      .filter(r => r.user_id === userId)
+      .map(r => ({
+        id: r.id,
+        user_id: r.user_id,
+        title: r.title,
+        overall_summary: r.overall_summary,
+        overall_status: r.overall_status,
+        created_at: r.created_at
+      }))
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  },
+
+  async findById(id, userId) {
+    if (!useLocalDb) {
+      try {
+        const fetchReport = await pool.query(
+          'SELECT * FROM reports WHERE id = $1 AND user_id = $2',
+          [id, userId]
+        );
+        return fetchReport.rows[0] || null;
+      } catch (err) {
+        console.error('❌ Database error during findById, falling back to local DB:', err.message);
+      }
+    }
+
+    // Fallback to local DB
+    const reports = readLocalReports();
+    return reports.find(r => r.id === id && r.user_id === userId) || null;
+  },
+
+  async delete(id, userId) {
+    if (!useLocalDb) {
+      try {
+        const deleteReport = await pool.query(
+          'DELETE FROM reports WHERE id = $1 AND user_id = $2 RETURNING id',
+          [id, userId]
+        );
+        if (deleteReport.rowCount > 0) return true;
+      } catch (err) {
+        console.error('❌ Database error during delete, falling back to local DB:', err.message);
+      }
+    }
+
+    // Fallback to local DB
+    const reports = readLocalReports();
+    const index = reports.findIndex(r => r.id === id && r.user_id === userId);
+    if (index !== -1) {
+      reports.splice(index, 1);
+      writeLocalReports(reports);
+      return true;
+    }
+    return false;
+  }
+};
+
 // Initialize Database Tables
 async function initDB() {
   try {
-    // Migration: Ensure columns exist for existing tables (Run first to avoid issues)
-
-
+    // Migration: Ensure tables exist
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -141,15 +273,29 @@ async function initDB() {
       );
     `);
     
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS reports (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        overall_summary TEXT,
+        overall_status TEXT,
+        data JSONB NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
     console.log('✅ Database tables and migrations initialized');
   } catch (err) {
     console.error('❌ Database initialization failed:', err.message);
-    console.warn('⚠️ Falling back to local file-based database (users-db.json)');
+    console.warn('⚠️ Falling back to local file-based database (users-db.json, reports-db.json)');
     useLocalDb = true;
     try {
       if (!fs.existsSync(USERS_FILE)) {
         writeLocalUsers([]);
+      }
+      if (!fs.existsSync(REPORTS_FILE)) {
+        writeLocalReports([]);
       }
     } catch (fsErr) {
       console.error('❌ Failed to initialize local database file:', fsErr.message);
@@ -300,7 +446,7 @@ async function callGeminiWithRetry(url, data, headers, retries = 3, delay = 2000
 async function callGroq(text) {
   try {
     const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-      model: 'llama-3.1-70b-versatile',
+      model: 'llama-3.3-70b-versatile',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: `Analyze this medical report and explain it:\n\n${text}` }
@@ -407,7 +553,14 @@ app.post('/api/analyze', authenticateToken, async (req, res) => {
     // Caching check
     if (analysisCache.has(text)) {
       console.log('Returning cached analysis result.');
-      return res.json({ success: true, data: analysisCache.get(text) });
+      const cachedResult = analysisCache.get(text);
+      try {
+        const saved = await reportRepo.create(req.user.id, cachedResult.title, cachedResult.overall_summary, cachedResult.overall_status, cachedResult);
+        cachedResult.id = saved.id;
+      } catch (dbErr) {
+        console.error('Failed to save cached report to database:', dbErr.message);
+      }
+      return res.json({ success: true, data: cachedResult });
     }
 
     // Call APIs (Consensus Approach)
@@ -439,6 +592,7 @@ app.post('/api/analyze', authenticateToken, async (req, res) => {
       // Fallback to Groq if Gemini fails
       if (GROQ_API_KEY) {
         console.log('Gemini failed, trying Groq fallback...');
+        console.error('Gemini error details:', e.message, e.response ? JSON.stringify(e.response.data) : '');
         result = await callGroq(text);
         result.fallback_active = true;
       } else {
@@ -448,6 +602,14 @@ app.post('/api/analyze', authenticateToken, async (req, res) => {
 
     if (result.error) {
       return res.status(400).json({ error: result.error });
+    }
+
+    // Save to user history
+    try {
+      const saved = await reportRepo.create(req.user.id, result.title, result.overall_summary, result.overall_status, result);
+      result.id = saved.id;
+    } catch (dbErr) {
+      console.error('Failed to save report to database:', dbErr.message);
     }
 
     analysisCache.set(text, result);
@@ -525,7 +687,14 @@ app.post('/api/analyze-file', authenticateToken, upload.single('file'), async (r
 
     if (analysisCache.has(cacheKey)) {
       console.log('Returning cached file analysis result.');
-      return res.json({ success: true, data: analysisCache.get(cacheKey) });
+      const cachedResult = analysisCache.get(cacheKey);
+      try {
+        const saved = await reportRepo.create(req.user.id, cachedResult.title, cachedResult.overall_summary, cachedResult.overall_status, cachedResult);
+        cachedResult.id = saved.id;
+      } catch (dbErr) {
+        console.error('Failed to save cached report to database:', dbErr.message);
+      }
+      return res.json({ success: true, data: cachedResult });
     }
 
     // Call APIs (Consensus Approach)
@@ -556,6 +725,7 @@ app.post('/api/analyze-file', authenticateToken, upload.single('file'), async (r
       // Fallback to Groq for text-based files
       if (GROQ_API_KEY && text.trim()) {
         console.log('Gemini failed for file, trying Groq fallback...');
+        console.error('Gemini error details for file:', e.message, e.response ? JSON.stringify(e.response.data) : '');
         result = await callGroq(text);
         result.fallback_active = true;
       } else {
@@ -567,6 +737,14 @@ app.post('/api/analyze-file', authenticateToken, upload.single('file'), async (r
       return res.status(400).json({ error: result.error });
     }
 
+    // Save to user history
+    try {
+      const saved = await reportRepo.create(req.user.id, result.title, result.overall_summary, result.overall_status, result);
+      result.id = saved.id;
+    } catch (dbErr) {
+      console.error('Failed to save report to database:', dbErr.message);
+    }
+
     analysisCache.set(cacheKey, result);
     res.json({ success: true, data: result });
 
@@ -576,6 +754,54 @@ app.post('/api/analyze-file', authenticateToken, upload.single('file'), async (r
     res.status(500).json({
       error: error.message || 'An error occurred during file analysis'
     });
+  }
+});
+
+/**
+ * GET /api/history
+ * Retrieves analysis history for the authenticated user
+ */
+app.get('/api/history', authenticateToken, async (req, res) => {
+  try {
+    const history = await reportRepo.findByUserId(req.user.id);
+    res.json({ success: true, data: history });
+  } catch (error) {
+    console.error('Error fetching history:', error.message);
+    res.status(500).json({ error: 'Failed to fetch history' });
+  }
+});
+
+/**
+ * GET /api/history/:id
+ * Retrieves a specific analysis result from the user's history
+ */
+app.get('/api/history/:id', authenticateToken, async (req, res) => {
+  try {
+    const report = await reportRepo.findById(req.params.id, req.user.id);
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    res.json({ success: true, data: report });
+  } catch (error) {
+    console.error('Error fetching report details:', error.message);
+    res.status(500).json({ error: 'Failed to fetch report details' });
+  }
+});
+
+/**
+ * DELETE /api/history/:id
+ * Deletes a specific report from the user's history
+ */
+app.delete('/api/history/:id', authenticateToken, async (req, res) => {
+  try {
+    const success = await reportRepo.delete(req.params.id, req.user.id);
+    if (!success) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    res.json({ success: true, message: 'Report deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting report:', error.message);
+    res.status(500).json({ error: 'Failed to delete report' });
   }
 });
 

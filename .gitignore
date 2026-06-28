@@ -42,3 +42,6 @@ test-files/
 .vercel
 users.json
 users-db.json
+reports-db.json
+scratch_transcribe.js
+verify_history.js
