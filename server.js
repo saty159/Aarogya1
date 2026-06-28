@@ -432,8 +432,9 @@ async function callGeminiWithRetry(url, data, headers, retries = 3, delay = 2000
     try {
       return await axios.post(url, data, { headers });
     } catch (error) {
-      if (error.response && error.response.status === 429 && attempt < retries) {
-        console.warn(`Google API 429 rate limit hit. Retrying in ${delay}ms (Attempt ${attempt}/${retries})...`);
+      const status = error.response ? error.response.status : null;
+      if (error.response && (status === 429 || status === 503) && attempt < retries) {
+        console.warn(`Google API ${status} hit. Retrying in ${delay}ms (Attempt ${attempt}/${retries})...`);
         await new Promise(res => setTimeout(res, delay));
         delay *= 2; // exponential backoff
       } else {
@@ -568,7 +569,7 @@ app.post('/api/analyze', authenticateToken, async (req, res) => {
     try {
       // Primary: Gemini
       const response = await requestQueue.add(() => 
-        callGeminiWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`, {
+        callGeminiWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
           systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
           contents: [{ parts: [{ text: `Analyze this medical report and explain it:\n\n${text}` }] }],
           generationConfig: { responseMimeType: "application/json" }
@@ -702,7 +703,7 @@ app.post('/api/analyze-file', authenticateToken, upload.single('file'), async (r
     try {
       // Primary: Gemini (Vision + Interpretation)
       const response = await requestQueue.add(() => 
-        callGeminiWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`, {
+        callGeminiWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
           systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
           contents: [{ parts: [{ text: `Analyze this medical report and explain it:\n\n${text}` }, ...imageParts] }],
           generationConfig: { responseMimeType: "application/json" }
@@ -820,7 +821,7 @@ app.get('/api/health', async (req, res) => {
   // Test Gemini
   if (API_KEY) {
     try {
-      await axios.get(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest?key=${API_KEY}`);
+      await axios.get(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash?key=${API_KEY}`);
       diagnostics.gemini.status = 'connected';
     } catch (e) {
       diagnostics.gemini.status = 'error';
